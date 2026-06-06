@@ -1,42 +1,45 @@
-// WhatsApp outbound sending via Meta Cloud API (Graph API v19.0)
+// WhatsApp outbound sending via Twilio REST API
 // Per-org credentials are preferred; env-var fallback used for webhook/bot flows
 // where the org may not yet be known.
 
 import { getAdminSupabase } from "@/lib/supabase";
 
-interface MetaSendOptions {
-  phoneNumberId: string;
-  accessToken: string;
+interface TwilioSendOptions {
+  accountSid: string;
+  authToken: string;
+  from: string;
 }
 
-async function resolveMetaCredentials(orgId?: string): Promise<MetaSendOptions> {
+async function resolveTwilioCredentials(orgId?: string): Promise<TwilioSendOptions> {
   if (orgId) {
     const supabase = getAdminSupabase();
     const { data: settings } = await supabase
       .from("org_settings")
-      .select("whatsapp_phone_id, whatsapp_access_token")
+      .select("whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token")
       .eq("org_id", orgId)
       .single();
 
-    if (settings?.whatsapp_phone_id && settings?.whatsapp_access_token) {
+    if (settings?.whatsapp_phone_id?.startsWith("AC") && settings?.whatsapp_access_token) {
       return {
-        phoneNumberId: settings.whatsapp_phone_id,
-        accessToken: settings.whatsapp_access_token,
+        accountSid: settings.whatsapp_phone_id,
+        authToken: settings.whatsapp_access_token,
+        from: settings.whatsapp_verify_token || process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886",
       };
     }
   }
 
   // Fall back to environment variables
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_WHATSAPP_FROM;
 
-  if (!phoneNumberId || !accessToken) {
+  if (!accountSid || !authToken || !from) {
     throw new Error(
-      "WhatsApp credentials not configured. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN, or configure them in org settings.",
+      "Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM in env, or configure them in settings.",
     );
   }
 
-  return { phoneNumberId, accessToken };
+  return { accountSid, authToken, from };
 }
 
 export async function sendWhatsAppMessage(
@@ -44,37 +47,44 @@ export async function sendWhatsAppMessage(
   body: string,
   orgId?: string,
 ): Promise<void> {
-  const { phoneNumberId, accessToken } = await resolveMetaCredentials(orgId);
+  const { accountSid, authToken, from } = await resolveTwilioCredentials(orgId);
 
-  // Normalize: strip any leading "whatsapp:" prefix (Twilio legacy format)
-  const toNormalized = to.replace(/^whatsapp:/, "");
+  // Twilio requires phone numbers in the format "whatsapp:+1234567890" for WhatsApp
+  let toNormalized = to.trim();
+  if (!toNormalized.startsWith("whatsapp:")) {
+    // Strip any leading plus if it already has it, to avoid doubling
+    const cleanNum = toNormalized.startsWith("+") ? toNormalized : `+${toNormalized}`;
+    toNormalized = `whatsapp:${cleanNum}`;
+  }
 
-  const res = await fetch(
-    `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: toNormalized,
-        type: "text",
-        text: {
-          preview_url: false,
-          body,
-        },
-      }),
+  let fromNormalized = from.trim();
+  if (!fromNormalized.startsWith("whatsapp:")) {
+    const cleanFrom = fromNormalized.startsWith("+") ? fromNormalized : `+${fromNormalized}`;
+    fromNormalized = `whatsapp:${cleanFrom}`;
+  }
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+
+  const params = new URLSearchParams();
+  params.append("From", fromNormalized);
+  params.append("To", toNormalized);
+  params.append("Body", body);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-  );
+    body: params.toString(),
+  });
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    console.error("Meta WhatsApp send error:", errData);
+    console.error("Twilio WhatsApp send error:", errData);
     throw new Error(
-      (errData as { error?: { message?: string } })?.error?.message ||
-        `Meta API error: ${res.status}`,
+      errData.message || `Twilio API error: ${res.status}`,
     );
   }
 }

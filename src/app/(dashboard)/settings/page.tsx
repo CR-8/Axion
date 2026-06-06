@@ -196,19 +196,19 @@ export default function SettingsPage() {
             <TabsContent value="whatsapp" className="space-y-5 mt-0 focus-visible:outline-none">
               <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground mb-2">
                 <MessageSquare className="size-4 text-text-secondary" />
-                WhatsApp Configuration
+                WhatsApp Configuration (Twilio REST API)
               </div>
 
               <div className="bg-surface-elevated border border-border-default rounded-xl p-4 space-y-1">
                 <p className="text-[12px] font-semibold text-foreground">Your Webhook URL</p>
                 <p className="font-mono text-[11px] text-text-secondary break-all select-all bg-background/50 px-2 py-1.5 rounded border border-border-default/40">{appUrl}/api/webhook</p>
-                <p className="text-[11px] text-text-secondary/60 mt-1">Copy this URL into your Meta App Dashboard &rarr; WhatsApp &rarr; Configuration &rarr; Webhook URL</p>
+                <p className="text-[11px] text-text-secondary/60 mt-1">Copy this URL into your Twilio Console &rarr; Messaging/Sandbox settings &rarr; Webhook URL</p>
               </div>
 
               {[
-                { label: "Phone Number ID", value: phoneId, set: setPhoneId, id: "wa-phone-id", placeholder: "1234567890", sensitive: false },
-                { label: "Access Token", value: accessToken, set: setAccessToken, id: "wa-token", placeholder: "EAAxxxxx…", sensitive: true },
-                { label: "Verify Token", value: verifyToken, set: setVerifyToken, id: "wa-verify-token", placeholder: "lexbot_verify_token", sensitive: false },
+                { label: "Twilio Account SID", value: phoneId, set: setPhoneId, id: "wa-phone-id", placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", sensitive: false },
+                { label: "Twilio Auth Token", value: accessToken, set: setAccessToken, id: "wa-token", placeholder: "••••••••••••••••••••••••••••••••", sensitive: true },
+                { label: "Twilio Sender Number", value: verifyToken, set: setVerifyToken, id: "wa-verify-token", placeholder: "whatsapp:+14155238886", sensitive: false },
               ].map(({ label, value, set, id, placeholder, sensitive }) => (
                 <div key={id} className="space-y-1.5">
                   <label htmlFor={id} className="text-text-secondary text-[10px] font-bold uppercase tracking-wider">{label}</label>
@@ -423,8 +423,8 @@ export default function SettingsPage() {
             {/* Checklist */}
             <div className="space-y-3 pt-2">
               {[
-                { label: "Webhook Configured", desc: "Verify token configured in app", met: stepWebhookCopied },
-                { label: "WhatsApp Credentials", desc: "Phone ID and Access Token entered", met: stepWaCredentials },
+                { label: "Twilio Sender Set", desc: "Twilio sender phone number configured", met: stepWebhookCopied },
+                { label: "Twilio Credentials", desc: "Account SID and Auth Token entered", met: stepWaCredentials },
                 { label: "AI Engine Credentials", desc: "API key and Model selection set", met: stepAiCredentials },
                 { label: "Bot Prompt & Identity", desc: "Bot name and custom prompt defined", met: stepPersonaConfigured },
               ].map(({ label, desc, met }, index) => (

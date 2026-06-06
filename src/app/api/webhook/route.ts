@@ -22,27 +22,92 @@ export async function GET(request: NextRequest) {
   return new Response("Forbidden", { status: 403 });
 }
 
-// ── POST — Meta Cloud API JSON format only ────────────────────
+// ── POST — Handles Meta JSON and Twilio UrlEncoded webhook payloads ─
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
 
-  if (!contentType.includes("application/json")) {
-    return NextResponse.json(
-      { error: "Unsupported content type. Expected application/json." },
-      { status: 415 },
-    );
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    try {
+      const formData = await request.formData();
+      const from = (formData.get("From") as string) || "";
+      const body = (formData.get("Body") as string) || "";
+      const messageSid = (formData.get("MessageSid") as string) || "";
+      const accountSid = (formData.get("AccountSid") as string) || "";
+      const to = (formData.get("To") as string) || "";
+
+      // Acknowledge immediately; process async
+      void processTwilio({ from, body, messageSid, accountSid, to });
+
+      // Twilio expects a TwiML response; an empty response works for acknowledgment
+      return new Response("<Response></Response>", {
+        headers: { "Content-Type": "text/xml" },
+        status: 200,
+      });
+    } catch (err) {
+      console.error("Twilio parsing error:", err);
+      return new Response("Invalid request", { status: 400 });
+    }
   }
 
-  let payload: Record<string, unknown>;
+  if (contentType.includes("application/json")) {
+    let payload: Record<string, unknown>;
+    try {
+      payload = (await request.json()) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    // Acknowledge immediately; process async
+    void processMeta(payload);
+    return NextResponse.json({ status: "ok" }, { status: 200 });
+  }
+
+  return NextResponse.json(
+    { error: "Unsupported content type." },
+    { status: 415 },
+  );
+}
+
+// ── Twilio message processor ─────────────────────────────────
+async function processTwilio(data: {
+  from: string;
+  body: string;
+  messageSid: string;
+  accountSid: string;
+  to: string;
+}) {
   try {
-    payload = await request.json() as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+    const cleanFrom = data.from.replace(/^whatsapp:/, "");
+    const cleanTo = data.to.replace(/^whatsapp:/, "");
 
-  // Acknowledge immediately; process async
-  void processMeta(payload);
-  return NextResponse.json({ status: "ok" }, { status: 200 });
+    const supabase = getAdminSupabase();
+    let orgId: string | null = null;
+
+    if (data.accountSid) {
+      // Query org_settings to match accountSid (stored in whatsapp_phone_id),
+      // cleanTo phone number (stored in whatsapp_phone_id), or verify token (stored in whatsapp_verify_token)
+      const { data: settingsList } = await supabase
+        .from("org_settings")
+        .select("org_id")
+        .or(`whatsapp_phone_id.eq.${data.accountSid},whatsapp_phone_id.eq.${cleanTo},whatsapp_verify_token.eq.${cleanTo}`)
+        .limit(1);
+
+      if (settingsList && settingsList.length > 0) {
+        orgId = settingsList[0].org_id;
+      }
+    }
+
+    await processMessage({
+      from: cleanFrom,
+      messageText: data.body,
+      whatsappMsgId: data.messageSid,
+      hasMedia: false,
+      phoneNumberId: data.accountSid,
+      customOrgId: orgId || undefined,
+    });
+  } catch (err) {
+    console.error("Twilio processing error:", err);
+  }
 }
 
 // ── Meta Cloud API message processor ─────────────────────────
@@ -95,12 +160,14 @@ async function processMessage({
   whatsappMsgId,
   hasMedia,
   phoneNumberId,
+  customOrgId,
 }: {
   from: string;
   messageText: string;
   whatsappMsgId: string;
   hasMedia: boolean;
   phoneNumberId?: string;
+  customOrgId?: string;
 }) {
   if (!from || !messageText) return;
 
@@ -110,9 +177,9 @@ async function processMessage({
   const phone = from.startsWith("+") ? from : `+${from}`;
 
   try {
-    // Resolve org from phone_number_id if available
-    let orgId: string | null = null;
-    if (phoneNumberId) {
+    // Resolve org from phone_number_id if available and not already resolved
+    let orgId: string | null = customOrgId || null;
+    if (!orgId && phoneNumberId) {
       const { data: orgSettings } = await supabase
         .from("org_settings")
         .select("org_id")

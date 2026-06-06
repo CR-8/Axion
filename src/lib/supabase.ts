@@ -15,11 +15,15 @@ export function getAdminSupabase(): SupabaseClient {
   }
   return _adminClient;
 }
-
 // Proxy for backward compatibility
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop) {
-    return (getAdminSupabase() as unknown as Record<string | symbol, unknown>)[prop];
+    const admin = getAdminSupabase();
+    const value = (admin as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === "function") {
+      return value.bind(admin);
+    }
+    return value;
   },
 });
 

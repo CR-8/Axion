@@ -463,6 +463,9 @@ export function AppSidebar({
                           if (itemHasSubs || itemIsChat) {
                             // Expand sidebar to show content panel
                             setOpen(true)
+                            if (itemIsChat) {
+                              router.push(item.url)
+                            }
                           } else {
                             // Collapse sidebar and navigate directly
                             setOpen(false)
