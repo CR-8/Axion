@@ -112,3 +112,39 @@ export async function getGenericAIResponse(
     return "Please share your Case ID to get started.";
   }
 }
+
+// ── Court Update Summarization (for Case Monitoring) ─────────
+export async function summarizeCourtUpdate(
+  updateContent: string,
+  caseNumber: string,
+  courtName?: string,
+): Promise<string> {
+  const openai = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY || "",
+  });
+
+  const courtCtx = courtName ? ` at ${courtName}` : "";
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.AI_MODEL || "openai/gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a legal assistant that summarizes court updates for lawyers and their clients. Write a concise 2-3 sentence summary in plain language that a non-lawyer can understand. Focus on: what happened, what it means, and what action may be needed. Do not use legal jargon. Keep it under 100 words.`,
+        },
+        {
+          role: "user",
+          content: `Summarize this court update for case ${caseNumber}${courtCtx}:\n\n${updateContent}`,
+        },
+      ],
+    });
+    return (
+      completion.choices[0]?.message?.content ||
+      "Court update received. Please contact your lawyer for details."
+    );
+  } catch {
+    return "Court update received. Please contact your lawyer for details.";
+  }
+}

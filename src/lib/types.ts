@@ -101,7 +101,8 @@ export interface CaseEvent {
     | "hearing_updated"
     | "lawyer_changed"
     | "note_added"
-    | "document_uploaded";
+    | "document_uploaded"
+    | "court_update";
   old_value: string | null;
   new_value: string | null;
   note: string | null;
@@ -163,6 +164,48 @@ export interface ConversationWithLastMessage extends Conversation {
   last_message: string | null;
   client?: Pick<Client, "name" | "phone"> | null;
   case?: Pick<Case, "case_number" | "status"> | null;
+}
+
+// ─── Case Monitoring ──────────────────────────────────────────
+
+export type MonitoringStatus = 'active' | 'paused' | 'error';
+
+export interface CaseMonitoring {
+  id: string;
+  case_id: string;
+  org_id: string;
+  external_case_number: string;
+  court_name: string | null;
+  last_checked_at: string | null;
+  last_known_update_at: string | null;
+  monitoring_status: MonitoringStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseUpdate {
+  id: string;
+  monitoring_id: string;
+  case_id: string;
+  update_title: string;
+  update_date: string;
+  update_source: string;
+  update_content: string | null;
+  ai_summary: string | null;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  org_id: string;
+  user_id: string | null;
+  type: string;
+  title: string;
+  body: string | null;
+  case_id: string | null;
+  is_read: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 // ─── UI helpers ───────────────────────────────────────────────

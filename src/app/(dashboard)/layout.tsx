@@ -13,6 +13,7 @@ import {
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 
 import {
   Breadcrumb,
@@ -151,6 +152,7 @@ export default function DashboardLayout({
                 <span>Search...</span>
                 <kbd className="bg-background border border-border-default px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-tight">Ctrl K</kbd>
               </button>
+              <NotificationBell />
               <ThemeToggle />
               <div className="flex items-center gap-1.5 text-[11px] text-foreground/90 bg-muted border border-border-default rounded-full px-3 py-1">
                 <Bot className="size-3 text-foreground/60" />

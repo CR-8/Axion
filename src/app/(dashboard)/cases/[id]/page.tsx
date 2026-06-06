@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Calendar, User, FileText, Clock, Loader2, CheckCircle2, AlertCircle, Edit2, Bell, Copy, Check, ExternalLink, ShieldCheck, MessageSquare, Plus, FileCode } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Clock, Loader2, CheckCircle2, AlertCircle, Edit2, Bell, Copy, Check, ExternalLink, ShieldCheck, MessageSquare, Plus, FileCode, RefreshCw, Satellite, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CASE_STATUS_LABELS, CASE_TYPE_LABELS, type CaseStatus, type CaseType } from "@/lib/types";
+import { CASE_STATUS_LABELS, CASE_TYPE_LABELS, type CaseStatus, type CaseType, type CaseMonitoring, type CaseUpdate } from "@/lib/types";
 
 interface CaseDetail {
   id: string;
@@ -65,6 +65,13 @@ export default function CaseDetailPage() {
   // Notification State
   const [sendingNotif, setSendingNotif] = useState(false);
 
+  // Case Monitoring State
+  const [monitoring, setMonitoring] = useState<CaseMonitoring | null>(null);
+  const [courtUpdates, setCourtUpdates] = useState<CaseUpdate[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [enablingMonitoring, setEnablingMonitoring] = useState(false);
+  const [extCaseNumber, setExtCaseNumber] = useState("");
+
   const loadCase = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -86,6 +93,90 @@ export default function CaseDetailPage() {
   }, [id]);
 
   useEffect(() => { void loadCase(); }, [loadCase]);
+
+  // Load monitoring data
+  const loadMonitoring = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/cases/${id}/monitoring`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setMonitoring(data.monitoring || null);
+      setCourtUpdates(data.updates || []);
+    } catch {
+      // silent
+    }
+  }, [id]);
+
+  useEffect(() => { void loadMonitoring(); }, [loadMonitoring]);
+
+  // Enable monitoring
+  async function handleEnableMonitoring() {
+    if (!caseData) return;
+    setEnablingMonitoring(true);
+    try {
+      const res = await fetch(`/api/cases/${id}/monitoring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          external_case_number: extCaseNumber.trim() || caseData.case_number,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to enable monitoring.");
+      }
+      toast.success("Court monitoring enabled!");
+      setExtCaseNumber("");
+      await loadMonitoring();
+    } catch (e: unknown) {
+      toast.error((e as Error).message);
+    } finally {
+      setEnablingMonitoring(false);
+    }
+  }
+
+  // Sync case
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/cases/${id}/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed.");
+      if (data.newUpdates > 0) {
+        toast.success(`${data.newUpdates} new court update(s) found!`);
+      } else {
+        toast.info("No new updates found.");
+      }
+      if (data.errors?.length > 0) {
+        data.errors.forEach((e: string) => toast.warning(e));
+      }
+      await Promise.all([loadCase(), loadMonitoring()]);
+    } catch (e: unknown) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Toggle monitoring pause/resume
+  async function toggleMonitoringStatus() {
+    if (!monitoring) return;
+    const newStatus = monitoring.monitoring_status === "active" ? "paused" : "active";
+    try {
+      const res = await fetch(`/api/cases/${id}/monitoring`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monitoring_status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update monitoring status.");
+      toast.success(`Monitoring ${newStatus === "active" ? "resumed" : "paused"}.`);
+      await loadMonitoring();
+    } catch (e: unknown) {
+      toast.error((e as Error).message);
+    }
+  }
 
   // Copy Case ID to Clipboard
   function copyCaseNumber() {
@@ -223,6 +314,7 @@ export default function CaseDetailPage() {
     lawyer_changed: "Lawyer reassigned",
     note_added: "Lawyer Note added",
     document_uploaded: "Document uploaded",
+    court_update: "Court Update Detected",
   };
 
   return (
@@ -542,6 +634,117 @@ export default function CaseDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Court Monitoring Card */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[11.5px] font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <Satellite className="size-3.5 text-text-secondary" />
+              Court Monitoring
+            </h2>
+
+            {!monitoring ? (
+              /* Enable monitoring form */
+              <div className="space-y-3">
+                <p className="text-[11px] text-text-secondary/70 leading-relaxed">
+                  Enable court monitoring to track updates for this case. Enter the external court case number if different from the internal one.
+                </p>
+                <div className="space-y-1.5">
+                  <label htmlFor="ext-case-num" className="text-text-secondary text-[10px] font-bold uppercase tracking-wider block">Court Case Number</label>
+                  <input
+                    id="ext-case-num"
+                    type="text"
+                    value={extCaseNumber}
+                    onChange={(e) => setExtCaseNumber(e.target.value)}
+                    placeholder={caseData.case_number}
+                    className="w-full bg-background border border-border-default rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono"
+                  />
+                </div>
+                <button
+                  onClick={() => void handleEnableMonitoring()}
+                  disabled={enablingMonitoring}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  {enablingMonitoring ? <Loader2 className="size-3.5 animate-spin" /> : <Satellite className="size-3.5" />}
+                  Enable Monitoring
+                </button>
+              </div>
+            ) : (
+              /* Monitoring active */
+              <div className="space-y-3.5">
+                {/* Status badge */}
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
+                    monitoring.monitoring_status === 'active'
+                      ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                      : monitoring.monitoring_status === 'paused'
+                        ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                        : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                  }`}>
+                    {monitoring.monitoring_status}
+                  </span>
+                  <button
+                    onClick={() => void toggleMonitoringStatus()}
+                    className="text-[10px] text-text-secondary hover:text-foreground font-semibold cursor-pointer underline underline-offset-2 transition-colors"
+                  >
+                    {monitoring.monitoring_status === 'active' ? 'Pause' : 'Resume'}
+                  </button>
+                </div>
+
+                {/* Info */}
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-text-secondary block text-[10px] font-bold uppercase tracking-wider">External Case #</span>
+                    <span className="text-foreground font-mono font-medium mt-0.5 block">{monitoring.external_case_number}</span>
+                  </div>
+                  {monitoring.last_checked_at && (
+                    <div>
+                      <span className="text-text-secondary block text-[10px] font-bold uppercase tracking-wider">Last Checked</span>
+                      <span className="text-foreground/80 font-mono text-[11px] mt-0.5 block tabular-nums">
+                        {new Date(monitoring.last_checked_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sync button */}
+                <button
+                  onClick={() => void handleSync()}
+                  disabled={syncing || monitoring.monitoring_status !== 'active'}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-foreground text-background hover:bg-foreground/90 disabled:opacity-40 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  {syncing ? 'Syncing...' : 'Sync Case'}
+                </button>
+
+                {/* Recent court updates */}
+                {courtUpdates.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-border-default/40">
+                    <h3 className="text-[10px] font-bold text-text-secondary uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="size-3" />
+                      Recent Court Updates ({courtUpdates.length})
+                    </h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {courtUpdates.slice(0, 5).map((u) => (
+                        <div key={u.id} className="bg-background border border-border-default/50 rounded-xl p-3 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-semibold text-foreground/90 truncate">{u.update_title}</p>
+                            <span className="text-[9px] text-text-secondary/40 font-mono shrink-0 tabular-nums">
+                              {new Date(u.update_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                            </span>
+                          </div>
+                          {u.ai_summary && (
+                            <p className="text-[10px] text-text-secondary/70 leading-relaxed">
+                              {u.ai_summary}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
       </div>
