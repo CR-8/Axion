@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { Briefcase, Plus, Calendar, ChevronRight, AlertCircle, Search } from "lucide-react";
+import { Briefcase, Plus, Calendar, ChevronRight, AlertCircle, Search, Download, Eye, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CASE_STATUS_LABELS, CASE_TYPE_LABELS, type CaseStatus, type CaseType } from "@/lib/types";
 
 // Tanstack & UI Table Components
@@ -41,13 +42,65 @@ const NEUTRAL_STATUS_COLORS: Record<CaseStatus, string> = {
   closed: "text-text-secondary/40 bg-muted/20 border-border-default/40",
 };
 
+function getRelativeDateStr(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const dStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const nStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffTime = dStart.getTime() - nStart.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const formattedDate = date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  if (diffDays === 0) return `Today (${formattedDate})`;
+  if (diffDays === 1) return `Tomorrow (${formattedDate})`;
+  if (diffDays === -1) return `Yesterday (${formattedDate})`;
+  if (diffDays > 1 && diffDays <= 7) return `In ${diffDays} days (${formattedDate})`;
+  if (diffDays < -1 && diffDays >= -7) return `${Math.abs(diffDays)} days ago (${formattedDate})`;
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
 export default function CasesPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-text-secondary/55">Loading case records...</div>}>
+      <CasesTableWrapper />
+    </Suspense>
+  );
+}
+
+function CasesTableWrapper() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CaseStatus | "">("");
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Visible columns
+  const [visibleColumns, setVisibleColumns] = useState({
+    case_number: true,
+    client: true,
+    court_name: true,
+    status: true,
+    next_hearing_date: true,
+    assigned_lawyer_name: true,
+  });
+
+  const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [statusFilter, setStatusFilter] = useState<CaseStatus | "">(
+    (searchParams.get("status") as CaseStatus) || ""
+  );
+
+  // Sync to URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (statusFilter) params.set("status", statusFilter);
+    const query = params.toString();
+    router.replace(`/cases${query ? `?${query}` : ""}`, { scroll: false });
+  }, [search, statusFilter, router]);
 
   const loadOrgId = useCallback(async () => {
     try {
@@ -98,7 +151,95 @@ export default function CasesPage() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const paginatedCases = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return cases.slice(start, start + ITEMS_PER_PAGE);
+  }, [cases, currentPage]);
+
+  const totalPages = Math.ceil(cases.length / ITEMS_PER_PAGE);
+
+  // Selection helpers
+  const allIdsOnPage = paginatedCases.map(c => c.id);
+  const isAllSelected = allIdsOnPage.length > 0 && allIdsOnPage.every(id => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    const next = new Set(selectedIds);
+    if (isAllSelected) {
+      allIdsOnPage.forEach(id => next.delete(id));
+    } else {
+      allIdsOnPage.forEach(id => next.add(id));
+    }
+    setSelectedIds(next);
+  };
+
+  // CSV Export functions
+  const exportCSV = useCallback((targetIds?: Set<string>) => {
+    const targets = targetIds && targetIds.size > 0 
+      ? cases.filter(c => targetIds.has(c.id))
+      : cases;
+      
+    const headers = ["Case ID", "Type", "Client", "Court", "City", "Status", "Next Hearing", "Assigned Lawyer"];
+    const rows = targets.map((c) => [
+      c.case_number,
+      CASE_TYPE_LABELS[c.case_type] || "",
+      c.clients?.name || "",
+      c.court_name || "",
+      c.court_city || "",
+      CASE_STATUS_LABELS[c.status] || "",
+      c.next_hearing_date ? new Date(c.next_hearing_date).toLocaleDateString("en-IN") : "",
+      c.assigned_lawyer_name || "",
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", targetIds ? "selected_cases.csv" : "lexbot_cases.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [cases]);
+
   const columns = useMemo<ColumnDef<CaseRow>[]>(() => [
+    {
+      id: "select",
+      header: () => (
+        <input
+          type="checkbox"
+          checked={isAllSelected}
+          onChange={toggleSelectAll}
+          className="rounded border-border-default bg-background text-primary focus:ring-primary size-4 cursor-pointer"
+        />
+      ),
+      cell: ({ row }) => {
+        const cs = row.original;
+        const isSelected = selectedIds.has(cs.id);
+        return (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => {
+              const next = new Set(selectedIds);
+              if (isSelected) {
+                next.delete(cs.id);
+              } else {
+                next.add(cs.id);
+              }
+              setSelectedIds(next);
+            }}
+            className="rounded border-border-default bg-background text-primary focus:ring-primary size-4 cursor-pointer"
+          />
+        );
+      },
+      enableSorting: false,
+    },
     {
       accessorKey: "case_number",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Case" />,
@@ -106,7 +247,7 @@ export default function CasesPage() {
         const c = row.original;
         return (
           <div>
-            <p className="text-foreground/90 font-medium font-mono text-[13px]">{c.case_number}</p>
+            <p className="text-foreground/90 font-medium font-mono text-[13px] tracking-wide tabular-nums">{c.case_number}</p>
             <p className="text-text-secondary text-[10px] mt-0.5">{CASE_TYPE_LABELS[c.case_type as CaseType]}</p>
           </div>
         );
@@ -155,12 +296,14 @@ export default function CasesPage() {
       cell: ({ row }) => {
         const dateStr = row.getValue("next_hearing_date") as string | null;
         if (!dateStr) return <span className="text-text-secondary/50 text-[12px]">—</span>;
-        const hearingDate = new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-        const isOverdue = new Date(dateStr) < new Date();
+        
+        const relativeDate = getRelativeDateStr(dateStr);
+        const isOverdue = new Date(dateStr) < new Date() && relativeDate.indexOf("Today") === -1;
+        
         return (
           <div className={`flex items-center gap-1.5 text-[12px] ${isOverdue ? "text-rose-400 font-semibold" : "text-text-secondary"}`}>
             <Calendar className="size-3.5 shrink-0" />
-            <span>{hearingDate}</span>
+            <span>{relativeDate}</span>
           </div>
         );
       },
@@ -184,7 +327,9 @@ export default function CasesPage() {
           <div className="flex items-center justify-end">
             <Link
               href={`/cases/${c.id}`}
-              className="size-7 rounded-lg flex items-center justify-center text-text-secondary/40 hover:text-foreground hover:bg-muted transition-all opacity-0 group-hover:opacity-100"
+              title="View Case Detail"
+              aria-label="View case details"
+              className="size-7 rounded-lg flex items-center justify-center text-text-secondary hover:text-foreground hover:bg-muted/80 transition-all border border-transparent hover:border-border-default"
             >
               <ChevronRight className="size-3.5" />
             </Link>
@@ -193,25 +338,19 @@ export default function CasesPage() {
       },
       enableSorting: false,
     }
-  ], []);
+  ], [isAllSelected, selectedIds]);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, statusFilter]);
-
-  const paginatedCases = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return cases.slice(start, start + ITEMS_PER_PAGE);
-  }, [cases, currentPage]);
-
-  const totalPages = Math.ceil(cases.length / ITEMS_PER_PAGE);
+  const filteredColumns = useMemo(() => {
+    return columns.filter(col => {
+      if (col.id === "select" || col.id === "actions") return true;
+      const key = (col as any).accessorKey as keyof typeof visibleColumns;
+      return visibleColumns[key] ?? true;
+    });
+  }, [columns, visibleColumns]);
 
   const { table } = useDataTable({
     data: paginatedCases,
-    columns,
+    columns: filteredColumns,
     getRowId: (row) => row.id,
   });
 
@@ -229,34 +368,120 @@ export default function CasesPage() {
         <Link
           href="/cases/new"
           id="new-case-btn"
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl transition-colors shadow-sm"
         >
           <Plus className="size-4" />
           New Case
         </Link>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <label className="flex-1 flex items-center gap-2.5 bg-surface border border-border-default rounded-xl px-3 py-2.5 focus-within:border-foreground/20 transition-colors">
-          <Search className="size-4 text-text-secondary/50 shrink-0" />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by case number or court…"
-            className="flex-1 bg-transparent outline-none text-sm text-foreground/90 placeholder:text-text-secondary/50"
-          />
-        </label>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as CaseStatus | "")}
-          className="bg-surface border border-border-default rounded-xl px-3 py-2.5 text-sm text-foreground/80 outline-none focus:border-foreground/20 transition-colors"
-        >
-          <option value="">All Statuses</option>
-          {(Object.keys(CASE_STATUS_LABELS) as CaseStatus[]).map((s) => (
-            <option key={s} value={s}>{CASE_STATUS_LABELS[s]}</option>
-          ))}
-        </select>
+      {/* Toolbar */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <label className="flex-1 flex items-center gap-2.5 bg-surface border border-border-default rounded-xl px-3 py-2.5 focus-within:border-foreground/20 focus-within:ring-2 focus-within:ring-ring/20 transition-colors">
+            <Search className="size-4 text-text-secondary/50 shrink-0" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by case number or court…"
+              className="flex-1 bg-transparent outline-none text-sm text-foreground/90 placeholder:text-text-secondary/50 focus:outline-none"
+            />
+          </label>
+          
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as CaseStatus | "")}
+            className="bg-surface border border-border-default rounded-xl px-3 py-2.5 text-sm text-foreground/80 outline-none focus:ring-2 focus:ring-ring/25 focus:border-foreground/20 transition-colors cursor-pointer"
+          >
+            <option value="">All Statuses</option>
+            {(Object.keys(CASE_STATUS_LABELS) as CaseStatus[]).map((s) => (
+              <option key={s} value={s}>{CASE_STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => exportCSV()}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-surface hover:bg-surface-elevated border border-border-default text-foreground/80 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs"
+            >
+              <Download className="size-3.5" />
+              Export CSV
+            </button>
+            
+            <div className="relative group">
+              <button className="flex items-center gap-1.5 px-3 py-2.5 bg-surface hover:bg-surface-elevated border border-border-default text-foreground/80 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs">
+                <Eye className="size-3.5" />
+                Columns
+              </button>
+              <div className="absolute right-0 mt-1.5 w-48 bg-surface border border-border-default rounded-xl p-3 shadow-xl hidden group-hover:block hover:block z-50 space-y-2">
+                <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider mb-2 border-b border-border-default/40 pb-1">Visible Columns</p>
+                {Object.keys(visibleColumns).map((col) => (
+                  <label key={col} className="flex items-center gap-2 text-xs text-foreground/80 cursor-pointer select-none hover:text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns[col as keyof typeof visibleColumns]}
+                      onChange={() => setVisibleColumns(prev => ({ ...prev, [col]: !prev[col as keyof typeof visibleColumns] }))}
+                      className="rounded border-border-default bg-background text-primary focus:ring-primary size-3.5 cursor-pointer"
+                    />
+                    <span className="capitalize">{col.replace(/_/g, " ")}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Filters / Chips */}
+        {(search || statusFilter) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-text-secondary">Active Filters:</span>
+            {search && (
+              <span className="flex items-center gap-1 bg-muted/60 text-foreground px-2 py-1 rounded-lg border border-border-default">
+                Search: "{search}"
+                <button onClick={() => setSearch("")} className="hover:text-rose-400 font-bold ml-1 cursor-pointer">×</button>
+              </span>
+            )}
+            {statusFilter && (
+              <span className="flex items-center gap-1 bg-muted/60 text-foreground px-2 py-1 rounded-lg border border-border-default">
+                Status: {CASE_STATUS_LABELS[statusFilter as CaseStatus] || statusFilter}
+                <button onClick={() => setStatusFilter("")} className="hover:text-rose-400 font-bold ml-1 cursor-pointer">×</button>
+              </span>
+            )}
+            <button
+              onClick={() => { setSearch(""); setStatusFilter(""); }}
+              className="text-text-secondary hover:text-foreground underline transition-colors cursor-pointer ml-1"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Bulk Action Bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-xl px-4 py-3 text-xs text-foreground animate-fade-in-up">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-primary animate-pulse" />
+              <span>Selected <strong>{selectedIds.size}</strong> case{selectedIds.size > 1 ? "s" : ""}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exportCSV(selectedIds)}
+                className="px-2.5 py-1.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1"
+              >
+                <Download className="size-3" />
+                Export Selected
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="px-2.5 py-1.5 bg-surface border border-border-default hover:bg-surface-elevated font-semibold rounded-lg text-foreground transition-all cursor-pointer"
+              >
+                Deselect
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* States */}
@@ -277,7 +502,7 @@ export default function CasesPage() {
           </button>
         </div>
       ) : loading ? (
-        <div className="bg-surface border border-border-default rounded-2xl overflow-hidden divide-y divide-border-default/40">
+        <div className="bg-surface border border-border-default rounded-2xl overflow-hidden divide-y divide-border-default/40 shadow-sm">
           <div className="h-10 bg-surface-elevated animate-pulse" />
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="p-5 flex items-center justify-between">
@@ -315,7 +540,7 @@ export default function CasesPage() {
           )}
         </div>
       ) : (
-        <div className="bg-surface border border-border-default rounded-2xl overflow-hidden">
+        <div className="bg-surface border border-border-default rounded-2xl overflow-hidden shadow-sm">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="min-w-[800px]">
               <Table className="table-fixed border-separate border-spacing-0 [&_tr:not(:last-child)_td]:border-b border-border-default">
@@ -336,15 +561,18 @@ export default function CasesPage() {
                   ))}
                 </TableHeader>
                 <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id} className="hover:bg-muted/30 transition-colors group">
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className="px-4 py-3.5 first:pl-5 last:pr-5 text-foreground/90 border-border-default/40">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
+                  {table.getRowModel().rows.map((row) => {
+                    const isSelected = selectedIds.has(row.original.id);
+                    return (
+                      <TableRow key={row.id} className={["hover:bg-muted/30 transition-colors group", isSelected ? "bg-primary/[0.02]" : ""].join(" ")}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id} className="px-4 py-3.5 first:pl-5 last:pr-5 text-foreground/90 border-border-default/40">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

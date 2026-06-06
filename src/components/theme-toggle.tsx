@@ -8,32 +8,39 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Standard next-themes hydration guard — intentional setState inside effect
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setMounted(true);
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!mounted) {
-    return <div className="size-8 rounded-lg bg-white/[0.04] border border-border-default shrink-0" />;
+    return <div className="size-8 rounded-lg bg-muted border border-border animate-pulse shrink-0" />;
   }
 
-  const toggleTheme = () => {
-    setTheme(theme === "light" ? "dark" : "light");
-  };
+  const isLight = theme === "light";
 
   return (
     <button
-      onClick={toggleTheme}
-      className="size-8 rounded-lg bg-white/[0.04] border border-border-default dark:bg-white/[0.04] flex items-center justify-center text-foreground hover:bg-white/[0.08] transition-all cursor-pointer shrink-0"
-      title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+      onClick={() => setTheme(isLight ? "dark" : "light")}
+      className="group relative size-8 rounded-lg bg-muted border border-border flex items-center justify-center text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-300 cursor-pointer shrink-0 overflow-hidden"
+      title={isLight ? "Switch to Dark Mode" : "Switch to Light Mode"}
     >
-      {theme === "light" ? (
-        <Moon className="size-4 text-zinc-800" strokeWidth={1.8} />
-      ) : (
-        <Sun className="size-4 text-zinc-100" strokeWidth={1.8} />
-      )}
+      <span className="absolute inset-0 rounded-lg bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-300" />
+      <Sun
+        className="size-4 absolute transition-all duration-500"
+        style={{
+          opacity: isLight ? 1 : 0,
+          transform: `rotate(${isLight ? 0 : 180}deg) scale(${isLight ? 1 : 0})`,
+        }}
+        strokeWidth={1.5}
+      />
+      <Moon
+        className="size-4 absolute transition-all duration-500"
+        style={{
+          opacity: isLight ? 0 : 1,
+          transform: `rotate(${isLight ? 180 : 0}deg) scale(${isLight ? 0 : 1})`,
+        }}
+        strokeWidth={1.5}
+      />
     </button>
   );
 }

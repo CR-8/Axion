@@ -2,68 +2,35 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { Users, Briefcase, FolderOpen, TrendingUp, Calendar, Scale, Bot, ArrowUpRight, AlertCircle, Sparkles, Clock, MessageSquare } from "lucide-react";
+import { Users, Briefcase, FolderOpen, Calendar, Bot, ArrowUpRight, AlertCircle, Sparkles, Clock, MessageSquare, Plus, CheckCircle2, ShieldAlert, ArrowRight, ShieldCheck, UserCheck, Settings } from "lucide-react";
 import Link from "next/link";
 import { CASE_STATUS_LABELS, type CaseStatus } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-
-// Recharts & UI Chart Components
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
 
 interface Stats {
   totalClients: number;
   activeCases: number;
   botMessages: number;
   docsUploaded: number;
-  casesByStatus: { status: CaseStatus; count: number }[];
+  unverifiedConvos: Array<{ id: string; phone: string; name: string | null; updated_at: string }>;
+  recentCaseChanges: Array<{ id: string; case_number: string; status: CaseStatus; updated_at: string }>;
+  lastMessages: Array<{
+    id: string;
+    content: string;
+    role: "user" | "assistant";
+    created_at: string;
+    conversations: { name: string | null; phone: string } | null;
+  }>;
   upcomingHearings: Array<{
     id: string;
     case_number: string;
     next_hearing_date: string;
-    clients: { name: string };
+    clients: { name: string } | null;
     court_name: string | null;
   }>;
-  chartData: {
-    messagesData: Array<{ month: string; value: number }>;
-    casesData: Array<{ month: string; value: number }>;
-  };
+  agentCount: number;
+  humanCount: number;
 }
-
-const messagesConfig = {
-  value: {
-    label: "Messages",
-    color: "var(--text-primary)",
-  },
-} satisfies ChartConfig;
-
-const casesConfig = {
-  value: {
-    label: "New Cases",
-    color: "var(--text-secondary)",
-  },
-} satisfies ChartConfig;
 
 const NEUTRAL_STATUS_COLORS: Record<CaseStatus, string> = {
   active: "text-foreground bg-muted border-border-default",
@@ -71,21 +38,6 @@ const NEUTRAL_STATUS_COLORS: Record<CaseStatus, string> = {
   adjourned: "text-text-secondary bg-muted/50 border-border-default/50",
   judgement_pending: "text-foreground/80 bg-surface border-border-default",
   closed: "text-text-secondary/40 bg-muted/20 border-border-default/40",
-};
-
-// Helper to get last 6 months names
-const getMonths = () => {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const result = [];
-  const d = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
-    result.push({
-      month: months[m.getMonth()] || "",
-      year: m.getFullYear(),
-    });
-  }
-  return result;
 };
 
 export default function DashboardHome() {
@@ -126,11 +78,22 @@ export default function DashboardHome() {
     try {
       const supabase = getBrowserSupabase();
 
-      const [clientsRes, casesRes, msgsRes, docsRes, hearingsRes] = await Promise.all([
+      // Parallel queries to construct the Today Command Center dashboard
+      const [
+        clientsCount,
+        casesRes,
+        docsCount,
+        hearingsRes,
+        unverifiedRes,
+        recentCasesRes,
+        lastMessagesRes,
+        conversationsRes
+      ] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact" }).eq("org_id", oid),
-        supabase.from("cases").select("id, status, created_at").eq("org_id", oid),
-        supabase.from("messages").select("created_at").gte("created_at", new Date(Date.now() - 180 * 86400000).toISOString()),
-        supabase.from("documents").select("id", { count: "exact" }).eq("org_id", oid).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()),
+        supabase.from("cases").select("id, status").eq("org_id", oid),
+        supabase.from("documents").select("id", { count: "exact" }).eq("org_id", oid),
+        
+        // Upcoming hearings (next 30 days)
         supabase.from("cases")
           .select("id, case_number, next_hearing_date, court_name, clients(name)")
           .eq("org_id", oid)
@@ -138,65 +101,81 @@ export default function DashboardHome() {
           .gte("next_hearing_date", new Date().toISOString().split("T")[0])
           .order("next_hearing_date", { ascending: true })
           .limit(5),
+          
+        // Unverified conversations
+        supabase.from("conversations")
+          .select("id, phone, name, updated_at")
+          .eq("org_id", oid)
+          .neq("session_state", "verified")
+          .order("updated_at", { ascending: false })
+          .limit(5),
+
+        // Recently modified cases (last 48 hours)
+        supabase.from("cases")
+          .select("id, case_number, status, updated_at")
+          .eq("org_id", oid)
+          .gte("updated_at", new Date(Date.now() - 48 * 3600 * 1000).toISOString())
+          .order("updated_at", { ascending: false })
+          .limit(5),
+          
+        // Last 5 messages feed
+        supabase.from("messages")
+          .select(`
+            id, content, role, created_at,
+            conversations!inner(name, phone, org_id)
+          `)
+          .eq("conversations.org_id", oid)
+          .order("created_at", { ascending: false })
+          .limit(5),
+
+        // Conversations for mode statistics
+        supabase.from("conversations")
+          .select("id, mode")
+          .eq("org_id", oid)
       ]);
 
-      if (clientsRes.error) throw clientsRes.error;
+      if (clientsCount.error) throw clientsCount.error;
       if (casesRes.error) throw casesRes.error;
-      if (msgsRes.error) throw msgsRes.error;
-      if (docsRes.error) throw docsRes.error;
+      if (docsCount.error) throw docsCount.error;
       if (hearingsRes.error) throw hearingsRes.error;
+      if (unverifiedRes.error) throw unverifiedRes.error;
+      if (recentCasesRes.error) throw recentCasesRes.error;
+      if (lastMessagesRes.error) throw lastMessagesRes.error;
+      if (conversationsRes.error) throw conversationsRes.error;
 
-      // Aggregate cases by status
-      const cases = casesRes.data || [];
-      const statusMap: Partial<Record<CaseStatus, number>> = {};
-      for (const c of cases) {
-        statusMap[c.status as CaseStatus] = (statusMap[c.status as CaseStatus] || 0) + 1;
-      }
-      const casesByStatus = (Object.keys(CASE_STATUS_LABELS) as CaseStatus[]).map((s) => ({
-        status: s,
-        count: statusMap[s] || 0,
+      const convos = conversationsRes.data || [];
+      const agentCount = convos.filter(c => c.mode === "agent").length;
+      const humanCount = convos.filter(c => c.mode === "human").length;
+
+      // Unpack lastMessages typed nicely
+      const messagesFeed = (lastMessagesRes.data || []).map((m: any) => ({
+        id: m.id,
+        content: m.content,
+        role: m.role as "user" | "assistant",
+        created_at: m.created_at,
+        conversations: m.conversations ? {
+          name: m.conversations.name,
+          phone: m.conversations.phone
+        } : null
       }));
 
-      // Aggregate chart data over the last 6 months
-      const monthsList = getMonths();
-      const actualCaseCounts: Record<string, number> = {};
-      cases.forEach((c) => {
-        if (c.created_at) {
-          const date = new Date(c.created_at);
-          const mName = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getMonth()] || "";
-          actualCaseCounts[mName] = (actualCaseCounts[mName] || 0) + 1;
-        }
-      });
-
-      const actualMessageCounts: Record<string, number> = {};
-      const messages = msgsRes.data || [];
-      messages.forEach((m) => {
-        if (m.created_at) {
-          const date = new Date(m.created_at);
-          const mName = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getMonth()] || "";
-          actualMessageCounts[mName] = (actualMessageCounts[mName] || 0) + 1;
-        }
-      });
-
-      const messagesData = monthsList.map((m) => ({
-        month: m.month,
-        value: actualMessageCounts[m.month] || 0,
-      }));
-
-      const casesData = monthsList.map((m) => ({
-        month: m.month,
-        value: actualCaseCounts[m.month] || 0,
-      }));
+      // Count total messages for stat counter
+      const { count: msgCount } = await supabase.from("messages")
+        .select("id", { count: "exact" });
 
       setStats({
-        totalClients: clientsRes.count || 0,
-        activeCases: cases.filter((c) => c.status !== "closed").length,
-        botMessages: messages.length,
-        docsUploaded: docsRes.count || 0,
-        casesByStatus,
-        upcomingHearings: (hearingsRes.data || []) as Stats["upcomingHearings"],
-        chartData: { messagesData, casesData },
+        totalClients: clientsCount.count || 0,
+        activeCases: (casesRes.data || []).filter(c => c.status !== "closed").length,
+        botMessages: msgCount || 0,
+        docsUploaded: docsCount.count || 0,
+        unverifiedConvos: unverifiedRes.data || [],
+        recentCaseChanges: recentCasesRes.data || [],
+        lastMessages: messagesFeed,
+        upcomingHearings: (hearingsRes.data || []) as any,
+        agentCount,
+        humanCount,
       });
+
     } catch (e: unknown) {
       setError((e as Error).message || "An unexpected error occurred while loading dashboard statistics.");
     } finally {
@@ -206,16 +185,6 @@ export default function DashboardHome() {
 
   useEffect(() => { void loadOrgId(); }, [loadOrgId]);
   useEffect(() => { if (orgId) void loadStats(orgId); }, [orgId, loadStats]);
-
-  const handleRetry = () => {
-    setLoading(true);
-    setError(null);
-    if (!orgId) {
-      void loadOrgId();
-    } else {
-      void loadStats(orgId);
-    }
-  };
 
   const currentGreeting = useMemo(() => {
     const hr = new Date().getHours();
@@ -233,335 +202,303 @@ export default function DashboardHome() {
     });
   }, []);
 
-  const statCards = [
-    { label: "Total Clients", value: stats?.totalClients ?? 0, href: "/clients", icon: Users },
-    { label: "Active Cases", value: stats?.activeCases ?? 0, href: "/cases", icon: Briefcase },
-    { label: "Bot Messages", value: stats?.botMessages ?? 0, href: "/chat", icon: MessageSquare },
-    { label: "Documents Stored", value: stats?.docsUploaded ?? 0, href: "/documents", icon: FolderOpen },
-  ];
+  // Time format helper
+  function formatMsgTime(dateStr: string) {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Relative Date calculation for hearings
+  function getHearingLabel(dateStr: string) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const dStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffTime = dStart.getTime() - nStart.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Tomorrow";
+    if (diffDays > 1 && diffDays <= 7) return `In ${diffDays} days`;
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="h-28 bg-muted animate-pulse rounded-2xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-red-dim border border-red-border rounded-3xl gap-4 max-w-md mx-auto my-12">
+        <div className="size-14 rounded-2xl bg-red-dim border border-red-border flex items-center justify-center text-red-text">
+          <AlertCircle className="size-6" strokeWidth={1.5} />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-red-text font-semibold text-[15px]">Failed to Load Command Center</h3>
+          <p className="text-text-secondary text-xs leading-relaxed max-w-[280px]">{error}</p>
+        </div>
+        <button
+          onClick={() => void loadStats(orgId || "")}
+          className="px-4 py-2 bg-foreground hover:bg-foreground/90 text-background font-bold text-xs rounded-xl transition-all cursor-pointer"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 animate-fade-in-up">
-      {/* Dynamic Greeting Hero Card */}
-      <div className="glass-card rounded-2xl p-6 relative overflow-hidden bg-gradient-to-br from-white/[0.03] to-transparent">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/[0.01] rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
+    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in-up">
+      {/* Greeting Banner */}
+      <div className="rounded-2xl p-6 relative overflow-hidden bg-surface border border-border-default shadow-sm">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-foreground/[0.01] rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-              {currentGreeting}, {userName || "Counsel"} ✨
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
+              {currentGreeting}, {userName || "Counsel"}
             </h1>
-            <p className="text-white/40 text-xs sm:text-sm font-medium">
-              Here is your law firm&apos;s dashboard overview.
+            <p className="text-text-secondary/70 text-xs sm:text-sm font-medium">
+              Welcome to LexBot Legal Operations Command Center.
             </p>
           </div>
-          <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-[11px] font-semibold text-white/50 w-fit">
-            <Clock className="size-3.5" />
+          <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-muted border border-border-default rounded-xl text-[11px] font-semibold text-text-secondary w-fit font-mono">
+            <Clock className="size-3.5 text-text-secondary" />
             <span>{formattedDate}</span>
           </div>
         </div>
       </div>
 
-      {/* State Rendering */}
-      {error ? (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white/[0.01] border border-white/[0.06] rounded-3xl gap-4 max-w-md mx-auto my-8 animate-fade-in-up">
-          <div className="size-14 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-white/40">
-            <AlertCircle className="size-6" strokeWidth={1.5} />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-white/80 font-semibold text-[15px]">Failed to Load Statistics</h3>
-            <p className="text-white/30 text-xs leading-relaxed max-w-[280px]">{error}</p>
-          </div>
-          <button
-            onClick={handleRetry}
-            className="px-4 py-2 bg-white/[0.06] border border-white/[0.1] hover:bg-white/[0.1] text-white font-semibold text-xs rounded-xl transition-premium cursor-pointer"
-          >
-            Try Again
-          </button>
-        </div>
-      ) : loading ? (
+      {/* Grid: 3-Column Today Command Center */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* COLUMN 1: Today's Agenda & Case Changes */}
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-28 rounded-2xl" />
-            ))}
-          </div>
-          <div className="grid lg:grid-cols-2 gap-6">
-            <Skeleton className="h-72 rounded-2xl" />
-            <Skeleton className="h-72 rounded-2xl" />
-          </div>
-        </div>
-      ) : stats && stats.totalClients === 0 && stats.activeCases === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-surface border border-border-default rounded-3xl gap-4 max-w-md mx-auto my-8 animate-fade-in-up">
-          <div className="size-14 rounded-2xl bg-muted border border-border-default flex items-center justify-center text-text-secondary/50">
-            <Scale className="size-6" strokeWidth={1.5} />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-foreground/85 font-semibold text-[15px]">Welcome to LexBot CRM</h3>
-            <p className="text-text-secondary text-xs leading-relaxed max-w-[280px]">Your firm workspace is ready. Add a client and link their case file to unlock all analytical widgets.</p>
-          </div>
-          <Link
-            href="/clients/new"
-            className="px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs rounded-xl transition-premium cursor-pointer"
-          >
-            Register Client
-          </Link>
-        </div>
-      ) : (
-        <>
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {statCards.map(({ label, value, href, icon: Icon }) => (
-              <Link key={label} href={href} className="block transition-premium">
-                <div className="bg-surface border border-border-default rounded-2xl p-5 transition-premium glow-hover-zinc relative overflow-hidden group">
-                  <div className="absolute -inset-px bg-radial from-foreground/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">{label}</span>
-                    <div className="size-7 rounded-lg bg-muted border border-border-default flex items-center justify-center text-text-secondary/60 group-hover:text-foreground group-hover:bg-surface-elevated transition-premium">
-                      <Icon className="size-3.5" strokeWidth={1.8} />
-                    </div>
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground mt-2">{value}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {/* Upcoming Hearings */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <Calendar className="size-4 text-text-secondary" />
+                Hearings Agenda
+              </h2>
+              <span className="text-[10px] text-text-secondary bg-muted border border-border-default px-2 py-0.5 rounded font-mono font-bold">
+                {stats?.upcomingHearings.length || 0} Scheduled
+              </span>
+            </div>
 
-          {/* Monochromatic Recharts Analytics Row */}
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* AreaChart card */}
-            <Card className="bg-surface rounded-2xl overflow-hidden border-border-default">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-foreground font-bold text-[14px] sm:text-[15px]">Bot Message Traffic</CardTitle>
-                    <CardDescription className="text-text-secondary text-[11px] sm:text-xs">WhatsApp bot conversation messages</CardDescription>
-                  </div>
-                  <Sparkles className="size-4 text-text-secondary/50" />
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <ChartContainer config={messagesConfig} className="h-56 w-full mt-2">
-                  <AreaChart
-                    data={stats?.chartData.messagesData}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="messageGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="var(--text-primary)"
-                          stopOpacity={0.08}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="var(--text-primary)"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="var(--border)" opacity={0.3} />
-                    <XAxis
-                      dataKey="month"
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                      fontSize={10}
-                      stroke="var(--text-secondary)"
-                      opacity={0.7}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                      fontSize={10}
-                      stroke="var(--text-secondary)"
-                      opacity={0.7}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent className="!bg-popover !text-popover-foreground !border-border-default" />} />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--text-primary)"
-                      strokeWidth={1.8}
-                      fill="url(#messageGradient)"
-                      name="Messages"
-                      activeDot={{ r: 4, stroke: "var(--text-primary)", strokeWidth: 1.5, fill: "var(--bg)" }}
-                    />
-                  </AreaChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            {/* BarChart card */}
-            <Card className="bg-surface rounded-2xl overflow-hidden border-border-default">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-foreground font-bold text-[14px] sm:text-[15px]">Case Registrations</CardTitle>
-                    <CardDescription className="text-text-secondary text-[11px] sm:text-xs">Monthly growth in case files</CardDescription>
-                  </div>
-                  <TrendingUp className="size-4 text-text-secondary/50" />
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <ChartContainer config={casesConfig} className="h-56 w-full mt-2">
-                  <BarChart
-                    data={stats?.chartData.casesData}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="var(--border)" opacity={0.3} />
-                    <XAxis
-                      dataKey="month"
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                      fontSize={10}
-                      stroke="var(--text-secondary)"
-                      opacity={0.7}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                      fontSize={10}
-                      stroke="var(--text-secondary)"
-                      opacity={0.7}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent className="!bg-popover !text-popover-foreground !border-border-default" />} />
-                    <Bar
-                      dataKey="value"
-                      fill="var(--text-secondary)"
-                      radius={[4, 4, 0, 0]}
-                      name="New Cases"
-                      maxBarSize={28}
-                    />
-                  </BarChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Cases by status */}
-            <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-bold text-foreground/90 flex items-center gap-2">
-                  <TrendingUp className="size-4 text-text-secondary/50" />
-                  Cases by Status
-                </h2>
-                <Link href="/cases" className="text-[11px] font-bold text-text-secondary hover:text-foreground transition-colors">
-                  View all →
-                </Link>
+            {stats?.upcomingHearings.length === 0 ? (
+              <div className="text-center py-8 bg-background/20 rounded-xl border border-dashed border-border-default/40">
+                <p className="text-text-secondary/50 text-xs">No upcoming hearings scheduled.</p>
               </div>
-              <div className="space-y-4 mt-2">
-                {(stats?.casesByStatus || []).map(({ status, count }) => {
-                  const total = stats?.casesByStatus.reduce((s, c) => s + c.count, 0) || 1;
-                  const pct = Math.round((count / total) * 100);
+            ) : (
+              <div className="space-y-2.5">
+                {stats?.upcomingHearings.map((h) => {
+                  const label = getHearingLabel(h.next_hearing_date);
+                  const isToday = label === "Today";
+                  
                   return (
-                    <div key={status} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-premium ${NEUTRAL_STATUS_COLORS[status] || NEUTRAL_STATUS_COLORS.closed}`}>
-                          {CASE_STATUS_LABELS[status]}
-                        </span>
-                        <span className="text-[11px] text-text-secondary font-mono tabular-nums">{count} cases ({pct}%)</span>
+                    <Link
+                      key={h.id}
+                      href={`/cases/${h.id}`}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border-default/80 bg-background/40 hover:bg-muted/30 transition-all group"
+                    >
+                      <div className={["shrink-0 text-center px-2 py-1 rounded-md text-[10px] font-bold border", isToday ? "bg-primary/10 border-primary/20 text-primary animate-pulse" : "bg-muted/50 border-border-default/40 text-text-secondary"].join(" ")}>
+                        {label}
                       </div>
-                      <div className="h-1 bg-muted border border-border-default/50 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-foreground/45 rounded-full transition-all duration-700 ease-out"
-                          style={{ width: `${pct}%` }}
-                        />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-foreground/80 truncate group-hover:text-foreground transition-colors font-mono">{h.case_number}</p>
+                        <p className="text-[10.5px] text-text-secondary truncate">{h.clients?.name || "No Client"} · {h.court_name || "Unknown Court"}</p>
                       </div>
-                    </div>
+                      <ArrowUpRight className="size-3.5 text-text-secondary/35 group-hover:text-foreground transition-colors shrink-0" />
+                    </Link>
                   );
                 })}
               </div>
-            </div>
-
-            {/* Upcoming hearings */}
-            <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-bold text-foreground/90 flex items-center gap-2">
-                  <Calendar className="size-4 text-text-secondary/50" />
-                  Upcoming Hearings
-                </h2>
-                <Link href="/cases?status=hearing_scheduled" className="text-[11px] font-bold text-text-secondary hover:text-foreground transition-colors">
-                  View all →
-                </Link>
-              </div>
-
-              {stats?.upcomingHearings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-text-secondary/40 space-y-2">
-                  <Calendar className="size-7" strokeWidth={1.5} />
-                  <p className="text-xs">No hearings scheduled</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {stats?.upcomingHearings.map((h) => {
-                    const date = new Date(h.next_hearing_date);
-                    const isToday = date.toDateString() === new Date().toDateString();
-                    const isTomorrow = date.toDateString() === new Date(Date.now() + 86400000).toDateString();
-                    const label = isToday ? "Today" : isTomorrow ? "Tomorrow" : date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-
-                    return (
-                      <Link
-                        key={h.id}
-                        href={`/cases/${h.id}`}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-border-default bg-muted/10 hover:bg-muted/30 hover:border-border-default transition-premium group relative"
-                      >
-                        <div className={`shrink-0 text-center px-2.5 py-1.5 rounded-lg border transition-premium ${isToday ? "bg-muted border-border-default text-foreground font-bold" : "bg-transparent border-border-default/40 text-text-secondary"}`}>
-                          <p className="text-[11px] tracking-tight">{label}</p>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-foreground/80 font-semibold truncate group-hover:text-foreground transition-colors">{h.case_number}</p>
-                          <p className="text-[11px] text-text-secondary truncate">{(h.clients as { name: string })?.name} · {h.court_name || "Court"}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isToday && (
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-foreground opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-foreground"></span>
-                            </span>
-                          )}
-                          <ArrowUpRight className="size-3.5 text-text-secondary/20 group-hover:text-text-secondary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-premium shrink-0" />
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* Redesigned Quick actions */}
-          <div className="bg-surface border border-border-default rounded-2xl p-5">
-            <h2 className="text-[12px] font-bold text-text-secondary uppercase tracking-wider mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
+          {/* Cases Changed Recently */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <Briefcase className="size-4 text-text-secondary" />
+              Recent Case Changes (48h)
+            </h2>
+
+            {stats?.recentCaseChanges.length === 0 ? (
+              <div className="text-center py-8 bg-background/20 rounded-xl border border-dashed border-border-default/40">
+                <p className="text-text-secondary/50 text-xs">No cases updated in the last 48 hours.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {stats?.recentCaseChanges.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/cases/${c.id}`}
+                    className="flex items-center justify-between p-3 rounded-xl border border-border-default/80 bg-background/40 hover:bg-muted/30 transition-all group"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground/85 font-mono truncate group-hover:text-foreground transition-colors">{c.case_number}</p>
+                      <p className="text-[10px] text-text-secondary mt-0.5">Updated {new Date(c.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                    <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold shrink-0 ${NEUTRAL_STATUS_COLORS[c.status]}`}>
+                      {CASE_STATUS_LABELS[c.status]}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMN 2: Live WhatsApp Inbox & AI Stats */}
+        <div className="space-y-6">
+          {/* Unverified Conversations */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <ShieldAlert className="size-4 text-rose-400" />
+                Unverified Sessions
+              </h2>
+              <span className="text-[9px] px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded font-bold uppercase animate-pulse">
+                {stats?.unverifiedConvos.length || 0} Pending
+              </span>
+            </div>
+
+            {stats?.unverifiedConvos.length === 0 ? (
+              <div className="text-center py-8 bg-background/20 rounded-xl border border-dashed border-border-default/40">
+                <p className="text-text-secondary/50 text-xs">All active client conversations verified.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {stats?.unverifiedConvos.map((convo) => (
+                  <Link
+                    key={convo.id}
+                    href={`/chat`}
+                    className="flex items-center justify-between p-3 rounded-xl border border-border-default/80 bg-background/40 hover:bg-muted/30 transition-all group"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-foreground/90 group-hover:text-foreground">{convo.name || convo.phone}</p>
+                      <p className="text-[10px] text-text-secondary font-mono mt-0.5 tracking-wide">{convo.phone}</p>
+                    </div>
+                    <ArrowRight className="size-3.5 text-text-secondary/40 group-hover:text-foreground transition-all shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Live Message Feed */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <MessageSquare className="size-4 text-text-secondary" />
+              Live Messages Feed
+            </h2>
+
+            {stats?.lastMessages.length === 0 ? (
+              <div className="text-center py-8 bg-background/20 rounded-xl border border-dashed border-border-default/40">
+                <p className="text-text-secondary/50 text-xs">No messages logged in feed.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stats?.lastMessages.map((msg) => {
+                  const isAssistant = msg.role === "assistant";
+                  return (
+                    <Link
+                      key={msg.id}
+                      href={`/chat`}
+                      className="block hover:bg-muted/20 p-2 rounded-lg transition-colors border border-transparent hover:border-border-default/30"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className={["size-5.5 rounded-full shrink-0 flex items-center justify-center text-[9px] font-bold mt-0.5", isAssistant ? "bg-primary/10 text-primary border border-primary/20" : "bg-muted text-text-secondary border border-border-default/60"].join(" ")}>
+                          {isAssistant ? "AI" : (msg.conversations?.name?.[0] || "U")}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-bold text-foreground/80 truncate">{isAssistant ? "AI Agent" : (msg.conversations?.name || msg.conversations?.phone)}</span>
+                            <span className="text-[9px] text-text-secondary/40 shrink-0 font-mono">{formatMsgTime(msg.created_at)}</span>
+                          </div>
+                          <p className="text-[11.5px] text-text-secondary/85 mt-0.5 truncate leading-relaxed">{msg.content}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMN 3: Quick Actions, AI triage, Reminders */}
+        <div className="space-y-6">
+          {/* Quick Actions Shortcuts */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="size-4 text-text-secondary" />
+              Command shortcuts
+            </h2>
+            
+            <div className="grid grid-cols-2 gap-2.5">
               {[
-                { href: "/clients/new", label: "New Client", icon: Users },
-                { href: "/cases/new", label: "New Case", icon: Briefcase },
-                { href: "/documents", label: "Upload Document", icon: FolderOpen },
-                { href: "/chat", label: "Open Chat", icon: MessageSquare },
-                { href: "/settings", label: "Bot Settings", icon: Bot },
-              ].map(({ href, label, icon: Icon }) => (
+                { href: "/clients/new", label: "New Client", desc: "Register client", icon: Users },
+                { href: "/cases/new", label: "New Case", desc: "Open docket", icon: Briefcase },
+                { href: "/documents", label: "Upload Doc", desc: "Store document", icon: FolderOpen },
+                { href: "/settings", label: "Settings", desc: "Meta & AI key", icon: Settings },
+              ].map(({ href, label, desc, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
-                  className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-border-default bg-muted/10 hover:bg-muted/30 hover:border-border-default text-text-secondary hover:text-foreground transition-premium group font-semibold text-xs sm:text-[13px]"
+                  className="flex flex-col p-3 rounded-xl border border-border-default/80 bg-background/50 hover:bg-muted/30 transition-all group text-left"
                 >
-                  <Icon className="size-4 text-text-secondary/50 group-hover:text-text-secondary group-hover:rotate-12 transition-premium" strokeWidth={1.8} />
-                  {label}
+                  <Icon className="size-4 text-text-secondary/50 group-hover:text-foreground transition-colors" strokeWidth={1.8} />
+                  <span className="text-[12px] font-bold text-foreground/90 mt-2 block">{label}</span>
+                  <span className="text-[10px] text-text-secondary/55 mt-0.5 block">{desc}</span>
                 </Link>
               ))}
             </div>
           </div>
-        </>
-      )}
+
+          {/* AI vs Human Stats Triage Card */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[12px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <Bot className="size-4 text-text-secondary" />
+              Automation Triage
+            </h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-background/50 border border-border-default/60 rounded-xl p-3.5 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-text-secondary font-semibold">
+                  <ShieldCheck className="size-3.5 text-primary" />
+                  AI Handled
+                </div>
+                <div className="text-2xl font-extrabold text-foreground mt-1.5 font-mono tabular-nums">{stats?.agentCount ?? 0}</div>
+                <p className="text-[9px] text-text-secondary/50 mt-0.5">Live WhatsApp sessions</p>
+              </div>
+
+              <div className="bg-background/50 border border-border-default/60 rounded-xl p-3.5 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-text-secondary font-semibold">
+                  <UserCheck className="size-3.5 text-amber-400" />
+                  Human Operator
+                </div>
+                <div className="text-2xl font-extrabold text-foreground mt-1.5 font-mono tabular-nums">{stats?.humanCount ?? 0}</div>
+                <p className="text-[9px] text-text-secondary/50 mt-0.5">Lawyer takeover active</p>
+              </div>
+            </div>
+            
+            <div className="bg-muted/40 border border-border-default/40 rounded-xl p-3 text-[11px] text-text-secondary leading-relaxed">
+              Active sessions: <strong className="text-foreground">{(stats?.agentCount || 0) + (stats?.humanCount || 0)}</strong>. Clients verifications: <strong className="text-foreground">{stats?.totalClients}</strong> registered. Set takeovers on the WhatsApp chat tab.
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }

@@ -128,6 +128,16 @@ export async function PATCH(
       created_by: ctx.userId,
     });
   }
+  if (body.note_text) {
+    events.push({
+      case_id: id,
+      event_type: "note_added",
+      old_value: null,
+      new_value: body.note_text as string,
+      created_by_name: updated_by_name || null,
+      created_by: ctx.userId,
+    });
+  }
 
   if (events.length > 0) {
     await supabase.from("case_events").insert(events);
