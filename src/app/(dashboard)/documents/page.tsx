@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { FolderOpen, Upload, FileText, Loader2, AlertCircle, Check, X, Trash2 } from "lucide-react";
+import { FolderOpen, Upload, FileText, Loader2, AlertCircle, Check, X } from "lucide-react";
 import { DOC_TYPE_LABELS, type DocType } from "@/lib/types";
 
 // Tanstack & UI Table Components
@@ -45,6 +45,8 @@ interface DocRow {
 
 export default function DocumentsPage() {
   const [orgId, setOrgId] = useState<string | null>(null);
+  // userId is reserved for future per-user audit features
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocRow[]>([]);
@@ -74,8 +76,8 @@ export default function DocumentsPage() {
       if (!res.ok) throw new Error("Failed to get download URL");
       const data = await res.json();
       window.open(data.url, "_blank");
-    } catch (e: any) {
-      toast.error(e.message || "Failed to download document.");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Failed to download document.");
     }
   }
 
@@ -103,10 +105,10 @@ export default function DocumentsPage() {
       if (docsRes.error) throw docsRes.error;
       if (casesRes.error) throw casesRes.error;
 
-      setDocs((docsRes.data || []) as any);
-      setCases((casesRes.data || []) as any);
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading documents.");
+      setDocs((docsRes.data || []) as DocRow[]);
+      setCases((casesRes.data || []) as unknown as typeof cases);
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading documents.");
     } finally {
       setLoading(false);
     }
@@ -123,8 +125,8 @@ export default function DocumentsPage() {
       setDeleteDialogOpen(false);
       setDocToDelete(null);
       void loadData();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to delete document.");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Failed to delete document.");
     }
   }
 
@@ -169,9 +171,9 @@ export default function DocumentsPage() {
         if (fileRef.current) fileRef.current.value = "";
         setTimeout(() => { setUploadSuccess(false); setShowUpload(false); void loadData(); }, 2000);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       clearInterval(progressInterval);
-      setUploadError(e.message || "An error occurred during file upload.");
+      setUploadError((e as Error).message || "An error occurred during file upload.");
     } finally {
       setUploading(false);
     }
@@ -364,7 +366,7 @@ export default function DocumentsPage() {
               >
                 <option value="" className="bg-background">Select case…</option>
                 {cases.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-background">{c.case_number} — {(c.clients as any)?.name}</option>
+                  <option key={c.id} value={c.id} className="bg-background">{c.case_number} — {c.clients?.name}</option>
                 ))}
               </select>
             </div>
@@ -568,7 +570,7 @@ export default function DocumentsPage() {
           <DialogHeader>
             <DialogTitle>Delete Document</DialogTitle>
             <DialogDescription>
-              Are you sure you want to permanently delete "{docToDelete?.name}"? This action cannot be undone.
+              Are you sure you want to permanently delete &quot;{docToDelete?.name}&quot;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">

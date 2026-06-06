@@ -64,8 +64,8 @@ export default function ClientsPage() {
       const { data: m, error: memberError } = await supabase.from("org_members").select("org_id").eq("user_id", user.id).single();
       if (memberError) throw memberError;
       if (m?.org_id) setOrgId(m.org_id);
-    } catch (e: any) {
-      setError(e.message || "Failed to load authorization data.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to load authorization data.");
       setLoading(false);
     }
   }, []);
@@ -83,8 +83,8 @@ export default function ClientsPage() {
         throw new Error(await res.text() || "Failed to fetch clients.");
       }
       setClients(await res.json());
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading clients.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading clients.");
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ export default function ClientsPage() {
         const cases = row.original.cases || [];
         return (
           <div className="flex flex-wrap gap-1.5">
-            {cases.slice(0, 2).map((cs: any) => (
+            {cases.slice(0, 2).map((cs) => (
               <span key={cs.id} className={`text-[10px] px-2 py-0.5 rounded border font-medium ${NEUTRAL_STATUS_COLORS[cs.status as CaseStatus]}`}>
                 {cs.case_number}
               </span>

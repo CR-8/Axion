@@ -1,42 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { getUserOrgId } from "@/lib/auth-guard";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const orgId = searchParams.get("org_id");
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!orgId) {
-    return NextResponse.json({ error: "org_id required" }, { status: 400 });
-  }
+  const supabase = getAdminSupabase();
 
   const { data, error } = await supabase
     .from("org_settings")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("org_id", ctx.orgId)
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Mask sensitive fields
-  if (data) {
-    if (data.ai_api_key) data.ai_api_key = "••••••••" + data.ai_api_key.slice(-4);
-    if (data.whatsapp_access_token) data.whatsapp_access_token = "••••••••" + data.whatsapp_access_token.slice(-4);
-  }
+  // Mask sensitive fields for display
+  const masked = { ...data } as Record<string, unknown>;
+  if (masked.ai_api_key) masked.ai_api_key = "••••••••" + String(masked.ai_api_key).slice(-4);
+  if (masked.whatsapp_access_token)
+    masked.whatsapp_access_token = "••••••••" + String(masked.whatsapp_access_token).slice(-4);
 
-  return NextResponse.json(data);
+  return NextResponse.json(masked);
 }
 
 export async function PATCH(request: NextRequest) {
-  const body = await request.json();
-  const { org_id, ...rest } = body;
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!org_id) {
-    return NextResponse.json({ error: "org_id required" }, { status: 400 });
-  }
+  const body = await request.json() as Record<string, unknown>;
 
-  // Don't update masked values
   const allowed = [
     "whatsapp_phone_id",
     "whatsapp_access_token",
@@ -54,14 +50,15 @@ export async function PATCH(request: NextRequest) {
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {
-    if (key in rest && !String(rest[key]).includes("••••••••")) {
-      updates[key] = rest[key];
+    if (key in body && !String(body[key]).includes("••••••••")) {
+      updates[key] = body[key];
     }
   }
 
+  const supabase = getAdminSupabase();
   const { data, error } = await supabase
     .from("org_settings")
-    .upsert({ org_id, ...updates }, { onConflict: "org_id" })
+    .upsert({ org_id: ctx.orgId, ...updates }, { onConflict: "org_id" })
     .select()
     .single();
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { Settings, Bot, Zap, Bell, MessageSquare, Loader2, Check, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Settings, Bot, Zap, Bell, MessageSquare, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";

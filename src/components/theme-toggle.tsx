@@ -8,9 +8,12 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // Standard next-themes hydration guard — intentional setState inside effect
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setMounted(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!mounted) {
     return <div className="size-8 rounded-lg bg-white/[0.04] border border-border-default shrink-0" />;

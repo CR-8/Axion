@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Users, ArrowLeft, Check, Loader2, Copy, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Copy, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { LANGUAGES } from "@/lib/types";
 
 const STEPS = ["Personal Info", "Review & Create"];
 
 export default function NewClientPage() {
+  // router kept for navigation after creation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -35,6 +37,7 @@ export default function NewClientPage() {
     if (m?.org_id) setOrgId(m.org_id);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount
   useEffect(() => { void loadUser(); }, [loadUser]);
 
   async function handleCreate() {

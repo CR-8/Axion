@@ -1,32 +1,41 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { getUserOrgId, isAuthorized } from "@/lib/auth-guard";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
-  const body = await request.json();
-  const { message } = body;
+  const supabase = getAdminSupabase();
 
-  if (!message?.trim()) {
-    return Response.json({ error: "Message is required" }, { status: 400 });
-  }
-
-  // Get conversation to find phone number
+  // Get conversation and verify org ownership
   const { data: conversation, error: convoError } = await supabase
     .from("conversations")
-    .select("phone")
+    .select("phone, org_id")
     .eq("id", id)
     .single();
 
   if (convoError || !conversation) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
   }
+  if (!isAuthorized(ctx, conversation.org_id as string)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  // Send via Meta Cloud API
-  await sendWhatsAppMessage(conversation.phone, message);
+  const body = await request.json() as { message?: string };
+  const { message } = body;
+
+  if (!message?.trim()) {
+    return Response.json({ error: "Message is required" }, { status: 400 });
+  }
+
+  // Send via Meta Cloud API (using org's credentials)
+  await sendWhatsAppMessage(conversation.phone as string, message, ctx.orgId);
 
   // Store in DB
   const { data: msg, error: msgError } = await supabase
@@ -43,7 +52,6 @@ export async function POST(
     return Response.json({ error: msgError.message }, { status: 500 });
   }
 
-  // Update conversation timestamp
   await supabase
     .from("conversations")
     .update({ updated_at: new Date().toISOString() })

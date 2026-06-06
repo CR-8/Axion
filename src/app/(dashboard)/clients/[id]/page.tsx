@@ -49,8 +49,8 @@ export default function ClientDetailPage() {
         throw new Error(await res.text() || "Failed to load client detail.");
       }
       setClient(await res.json());
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading the client details.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading the client details.");
     } finally {
       setLoading(false);
     }

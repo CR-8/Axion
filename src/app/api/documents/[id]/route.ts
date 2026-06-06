@@ -1,29 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { getUserOrgId, isAuthorized } from "@/lib/auth-guard";
 
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
+  const supabase = getAdminSupabase();
 
   const { data: doc, error } = await supabase
     .from("documents")
-    .select("storage_path, name, mime_type, doc_type")
+    .select("org_id, storage_path, name, mime_type, doc_type")
     .eq("id", id)
     .single();
 
   if (error || !doc) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
+  if (!isAuthorized(ctx, doc.org_id as string)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Generate a signed URL (valid 60 minutes)
   const { data: urlData, error: urlError } = await supabase.storage
     .from("case-documents")
-    .createSignedUrl(doc.storage_path, 3600);
+    .createSignedUrl(doc.storage_path as string, 3600);
 
   if (urlError || !urlData) {
-    return NextResponse.json({ error: urlError?.message || "Failed to generate URL" }, { status: 500 });
+    return NextResponse.json(
+      { error: urlError?.message || "Failed to generate URL" },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({
@@ -35,23 +46,29 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
+  const supabase = getAdminSupabase();
 
   const { data: doc } = await supabase
     .from("documents")
-    .select("storage_path")
+    .select("org_id, storage_path")
     .eq("id", id)
     .single();
 
-  if (doc) {
-    await supabase.storage.from("case-documents").remove([doc.storage_path]);
+  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!isAuthorized(ctx, doc.org_id as string)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { error } = await supabase.from("documents").delete().eq("id", id);
+  await supabase.storage.from("case-documents").remove([doc.storage_path as string]);
 
+  const { error } = await supabase.from("documents").delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

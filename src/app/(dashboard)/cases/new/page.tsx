@@ -58,6 +58,7 @@ export default function NewCasePage() {
     setLawyers(lawyersRes.data || []);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount
   useEffect(() => { void loadData(); }, [loadData]);
 
   async function handleCreate(e: React.FormEvent) {

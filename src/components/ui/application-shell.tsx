@@ -227,6 +227,7 @@ const SidebarLogo = ({ logo }: { logo: SidebarData["logo"] }) => {
       <SidebarMenuItem>
         <SidebarMenuButton size="lg">
           <div className="flex aspect-square size-8 items-center justify-center rounded-sm bg-primary">
+          {/* eslint-disable-next-line @next/next/no-img-element -- external CDN logo, cannot be optimized */}
             <img
               src={logo.src}
               alt={logo.alt}
@@ -405,6 +406,7 @@ export function ApplicationShell1({ className }: ApplicationShell1Props) {
           />
           <a href="#" className="flex items-center gap-2 md:hidden">
             <div className="flex aspect-square size-8 items-center justify-center rounded-sm bg-primary">
+              {/* eslint-disable-next-line @next/next/no-img-element -- external CDN logo */}
               <img
                 src={sidebarData.logo.src}
                 alt={sidebarData.logo.alt}

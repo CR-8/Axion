@@ -59,8 +59,8 @@ export default function CasesPage() {
       const { data: m, error: memberError } = await supabase.from("org_members").select("org_id").eq("user_id", user.id).single();
       if (memberError) throw memberError;
       if (m?.org_id) setOrgId(m.org_id);
-    } catch (e: any) {
-      setError(e.message || "Failed to load authentication data.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to load authentication data.");
       setLoading(false);
     }
   }, []);
@@ -78,8 +78,8 @@ export default function CasesPage() {
         throw new Error(await res.text() || "Failed to load cases.");
       }
       setCases(await res.json());
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading cases.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading cases.");
     } finally {
       setLoading(false);
     }

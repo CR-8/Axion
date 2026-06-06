@@ -133,9 +133,9 @@ export default function ChatPage() {
       const data = await readJson<ConversationWithLastMessage[]>(await fetch("/api/conversations"));
       setConversations(data);
       setBackendNotice(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setConversations([]);
-      setSidebarError(e.message || "Failed to load active chats.");
+      setSidebarError((e as Error).message || "Failed to load active chats.");
       setBackendNotice("Backend unavailable — messages are disabled.");
     } finally {
       setSidebarLoading(false);
@@ -149,9 +149,9 @@ export default function ChatPage() {
       const data = await readJson<Message[]>(await fetch(`/api/conversations/${id}/messages`));
       setMessages(data);
       setBackendNotice(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setMessages([]);
-      setMessagesError(e.message || "Failed to load message history.");
+      setMessagesError((e as Error).message || "Failed to load message history.");
       setBackendNotice("Backend unavailable — messages are disabled.");
     } finally {
       setMessagesLoading(false);

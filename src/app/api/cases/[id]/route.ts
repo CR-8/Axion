@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { getUserOrgId, isAuthorized } from "@/lib/auth-guard";
 
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
+  const supabase = getAdminSupabase();
 
   const { data, error } = await supabase
     .from("cases")
@@ -25,6 +30,9 @@ export async function GET(
   if (!data) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (!isAuthorized(ctx, data.org_id as string)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   return NextResponse.json(data);
 }
@@ -33,16 +41,26 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const body = await request.json();
-  const { updated_by_name, ...rest } = body;
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Fetch current case to log changes
-  const { data: current } = await supabase
+  const { id } = await params;
+  const supabase = getAdminSupabase();
+
+  // Verify ownership
+  const { data: existing } = await supabase
     .from("cases")
-    .select("status, next_hearing_date, assigned_lawyer_id, assigned_lawyer_name")
+    .select("org_id, status, next_hearing_date, assigned_lawyer_id, assigned_lawyer_name")
     .eq("id", id)
     .single();
+
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!isAuthorized(ctx, existing.org_id as string)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json() as Record<string, unknown>;
+  const { updated_by_name, ...rest } = body as { updated_by_name?: string } & Record<string, unknown>;
 
   const allowed = [
     "status",
@@ -77,33 +95,37 @@ export async function PATCH(
     old_value: string | null;
     new_value: string | null;
     created_by_name: string | null;
+    created_by: string | null;
   }> = [];
 
-  if (rest.status && current?.status !== rest.status) {
+  if (rest.status && existing.status !== rest.status) {
     events.push({
       case_id: id,
       event_type: "status_change",
-      old_value: current?.status || null,
-      new_value: rest.status,
+      old_value: existing.status || null,
+      new_value: rest.status as string,
       created_by_name: updated_by_name || null,
+      created_by: ctx.userId,
     });
   }
-  if (rest.next_hearing_date && current?.next_hearing_date !== rest.next_hearing_date) {
+  if (rest.next_hearing_date && existing.next_hearing_date !== rest.next_hearing_date) {
     events.push({
       case_id: id,
       event_type: "hearing_updated",
-      old_value: current?.next_hearing_date || null,
-      new_value: rest.next_hearing_date,
+      old_value: existing.next_hearing_date || null,
+      new_value: rest.next_hearing_date as string,
       created_by_name: updated_by_name || null,
+      created_by: ctx.userId,
     });
   }
-  if (rest.assigned_lawyer_name && current?.assigned_lawyer_name !== rest.assigned_lawyer_name) {
+  if (rest.assigned_lawyer_name && existing.assigned_lawyer_name !== rest.assigned_lawyer_name) {
     events.push({
       case_id: id,
       event_type: "lawyer_changed",
-      old_value: current?.assigned_lawyer_name || null,
-      new_value: rest.assigned_lawyer_name,
+      old_value: existing.assigned_lawyer_name || null,
+      new_value: rest.assigned_lawyer_name as string,
       created_by_name: updated_by_name || null,
+      created_by: ctx.userId,
     });
   }
 

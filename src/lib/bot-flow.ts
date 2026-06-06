@@ -3,7 +3,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { getLegalAIResponse, getGenericAIResponse } from "@/lib/legal-ai";
+import { getLegalAIResponse } from "@/lib/legal-ai";
 import { detectIntent } from "@/lib/intent";
 import type { Conversation, Case, Client } from "@/lib/types";
 import { CASE_STATUS_LABELS, DOC_TYPE_LABELS } from "@/lib/types";
@@ -21,7 +21,7 @@ interface BotContext {
 }
 
 export async function handleBotMessage(ctx: BotContext): Promise<void> {
-  const { conversation, messageText, phone } = ctx;
+  const { conversation, messageText } = ctx;
 
   // Store the incoming user message
   await supabase.from("messages").insert({

@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
 import { handleBotMessage } from "@/lib/bot-flow";
 import type { Conversation } from "@/lib/types";
 
-// ── GET — Meta webhook verification ─────────────────────────
-// Also works as a health check for Twilio-style "webhook active" check
+// ── GET — Meta webhook verification ──────────────────────────
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
+  // Use global env verify token (Meta sends one verification per app)
   const verifyToken =
     process.env.WHATSAPP_VERIFY_TOKEN || "lexbot_verify_token";
 
@@ -19,81 +19,108 @@ export async function GET(request: NextRequest) {
     return new Response(challenge, { status: 200 });
   }
 
-  // If no Meta params, just return health check (Twilio health check)
-  return new Response("Webhook active ✓", { status: 200 });
+  return new Response("Forbidden", { status: 403 });
 }
 
-// ── POST — Handles both Twilio (form) and Meta (JSON) formats ──
+// ── POST — Meta Cloud API JSON format only ────────────────────
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
 
-  let from: string = "";
-  let messageText: string = "";
-  let whatsappMsgId: string = "";
-  let hasMedia = false;
-
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    // ── Twilio WhatsApp format ──
-    const formData = await request.formData();
-    from = (formData.get("From") as string) ?? "";
-    messageText = (formData.get("Body") as string) ?? "";
-    whatsappMsgId = (formData.get("MessageSid") as string) ?? "";
-
-    // Check for media
-    const numMedia = parseInt((formData.get("NumMedia") as string) || "0");
-    if (numMedia > 0) {
-      hasMedia = true;
-      const mediaCaption = formData.get("Body") as string;
-      messageText = mediaCaption || "[media received]";
-    }
-
-    // Normalize: Twilio sends "whatsapp:+XXXXXXXXXX" → extract just the phone
-    from = from.replace(/^whatsapp:/, "");
-
-    // Return TwiML ack immediately (Twilio needs 200 + TwiML or empty)
-    // We process async then respond
-    void processMessage({ from, messageText, whatsappMsgId, hasMedia });
-    return new Response(
-      `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`,
-      { status: 200, headers: { "Content-Type": "text/xml" } },
-    );
-  } else if (contentType.includes("application/json")) {
-    // ── Meta Cloud API JSON format ──
-    let payload: any;
-    try {
-      payload = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-    }
-
-    void processMeta(payload);
-    return NextResponse.json({ status: "ok" }, { status: 200 });
-  } else {
+  if (!contentType.includes("application/json")) {
     return NextResponse.json(
-      { error: "Unsupported content type" },
+      { error: "Unsupported content type. Expected application/json." },
       { status: 415 },
     );
   }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = await request.json() as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  // Acknowledge immediately; process async
+  void processMeta(payload);
+  return NextResponse.json({ status: "ok" }, { status: 200 });
 }
 
-// ── Twilio message processor ──────────────────────────────────
+// ── Meta Cloud API message processor ─────────────────────────
+async function processMeta(payload: Record<string, unknown>) {
+  try {
+    const entry = (payload?.entry as Record<string, unknown>[])?.[0];
+    const change = (entry?.changes as Record<string, unknown>[])?.[0];
+    const value = change?.value as Record<string, unknown> | undefined;
+    if (!value) return;
+
+    // Skip delivery/read status updates
+    if (value.statuses) return;
+
+    const messages = value.messages as Record<string, unknown>[] | undefined;
+    if (!messages || messages.length === 0) return;
+
+    const message = messages[0] as Record<string, unknown>;
+    const from = message.from as string;
+    const whatsappMsgId = message.id as string;
+    const messageType = message.type as string;
+
+    // Identify the org by phone_number_id from webhook metadata
+    const metadata = value.metadata as Record<string, unknown> | undefined;
+    const phoneNumberId = metadata?.phone_number_id as string | undefined;
+
+    let messageText = "";
+    let hasMedia = false;
+
+    if (messageType === "text") {
+      const textObj = message.text as Record<string, unknown> | undefined;
+      messageText = (textObj?.body as string) || "";
+    } else if (["image", "document", "audio", "video"].includes(messageType)) {
+      hasMedia = true;
+      const mediaObj = message[messageType] as Record<string, unknown> | undefined;
+      messageText = (mediaObj?.caption as string) || `[${messageType} received]`;
+    }
+
+    if (!from) return;
+
+    await processMessage({ from, messageText, whatsappMsgId, hasMedia, phoneNumberId });
+  } catch (err) {
+    console.error("Meta webhook error:", err);
+  }
+}
+
+// ── Core message processor ────────────────────────────────────
 async function processMessage({
   from,
   messageText,
   whatsappMsgId,
   hasMedia,
+  phoneNumberId,
 }: {
   from: string;
   messageText: string;
   whatsappMsgId: string;
   hasMedia: boolean;
+  phoneNumberId?: string;
 }) {
   if (!from || !messageText) return;
+
+  const supabase = getAdminSupabase();
 
   // Normalize phone: ensure it has +
   const phone = from.startsWith("+") ? from : `+${from}`;
 
   try {
+    // Resolve org from phone_number_id if available
+    let orgId: string | null = null;
+    if (phoneNumberId) {
+      const { data: orgSettings } = await supabase
+        .from("org_settings")
+        .select("org_id")
+        .eq("whatsapp_phone_id", phoneNumberId)
+        .single();
+      orgId = orgSettings?.org_id ?? null;
+    }
+
     // Find or create conversation
     let { data: conversation } = await supabase
       .from("conversations")
@@ -109,6 +136,7 @@ async function processMessage({
           name: null,
           session_state: "new",
           mode: "agent",
+          org_id: orgId,
         })
         .select()
         .single<Conversation>();
@@ -155,39 +183,5 @@ async function processMessage({
     });
   } catch (err) {
     console.error("Webhook processing error:", err);
-  }
-}
-
-// ── Meta Cloud API message processor ─────────────────────────
-async function processMeta(payload: any) {
-  try {
-    const entry = payload?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-    if (!value) return;
-    if (value.statuses) return;
-
-    const messages = value.messages;
-    if (!messages || messages.length === 0) return;
-
-    const message = messages[0];
-    const from: string = message.from;
-    const whatsappMsgId: string = message.id;
-    const messageType: string = message.type;
-
-    let messageText = "";
-    let hasMedia = false;
-
-    if (messageType === "text") {
-      messageText = message.text?.body || "";
-    } else if (["image", "document", "audio", "video"].includes(messageType)) {
-      hasMedia = true;
-      messageText = message[messageType]?.caption || `[${messageType} received]`;
-    }
-
-    if (!from) return;
-    await processMessage({ from, messageText, whatsappMsgId, hasMedia });
-  } catch (err) {
-    console.error("Meta webhook error:", err);
   }
 }

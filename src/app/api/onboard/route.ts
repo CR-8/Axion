@@ -1,14 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
 import { DEFAULT_LEGAL_SYSTEM_PROMPT } from "@/lib/system-prompt";
 
-// Called during signup to create org + member record
+// Called during signup to create org + member record.
+// Requires an active Supabase session; the session user's ID must match the
+// userId in the request body to prevent one user creating an org for another.
 export async function POST(request: NextRequest) {
-  const { userId, email, fullName, orgName, orgType, city } = await request.json();
+  // 1. Verify the caller is the authenticated user
+  const supabaseAuth = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll() {
+          // Read-only here — session is already set
+        },
+      },
+    },
+  );
 
-  if (!userId || !orgName) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAuth.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const body = await request.json() as {
+    userId?: string;
+    email?: string;
+    fullName?: string;
+    orgName?: string;
+    orgType?: string;
+    city?: string;
+  };
+  const { userId, email, fullName, orgName, orgType, city } = body;
+
+  // 2. Session user must match the userId in the request body
+  if (!userId || userId !== user.id) {
+    return NextResponse.json(
+      { error: "Session user does not match provided userId" },
+      { status: 403 },
+    );
+  }
+
+  if (!orgName) {
+    return NextResponse.json({ error: "orgName is required" }, { status: 400 });
+  }
+
+  const supabase = getAdminSupabase();
 
   // Create organization
   const { data: org, error: orgError } = await supabase
@@ -18,16 +64,19 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (orgError || !org) {
-    return NextResponse.json({ error: orgError?.message || "Failed to create org" }, { status: 500 });
+    return NextResponse.json(
+      { error: orgError?.message || "Failed to create org" },
+      { status: 500 },
+    );
   }
 
   // Create org_member (admin role for the signup user)
   const { error: memberError } = await supabase.from("org_members").insert({
     org_id: org.id,
-    user_id: userId,
+    user_id: user.id,
     role: "admin",
     full_name: fullName || null,
-    email: email || null,
+    email: email || user.email || null,
   });
 
   if (memberError) {

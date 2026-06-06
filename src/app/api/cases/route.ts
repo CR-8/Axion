@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { getUserOrgId } from "@/lib/auth-guard";
 
 export async function GET(request: NextRequest) {
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
-  const orgId = searchParams.get("org_id");
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   const lawyerId = searchParams.get("lawyer_id");
 
-  if (!orgId) {
-    return NextResponse.json({ error: "org_id required" }, { status: 400 });
-  }
-
+  const supabase = getAdminSupabase();
   let query = supabase
     .from("cases")
     .select(`*, clients(name, phone, preferred_language)`)
-    .eq("org_id", orgId)
+    .eq("org_id", ctx.orgId)
     .order("updated_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
@@ -34,9 +34,24 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const ctx = await getUserOrgId(request);
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json() as {
+    client_id?: string;
+    case_number?: string;
+    court_name?: string;
+    court_city?: string;
+    case_type?: string;
+    status?: string;
+    next_hearing_date?: string;
+    assigned_lawyer_id?: string;
+    assigned_lawyer_name?: string;
+    ecourts_url?: string;
+    notes?: string;
+  };
+
   const {
-    org_id,
     client_id,
     case_number,
     court_name,
@@ -48,20 +63,32 @@ export async function POST(request: NextRequest) {
     assigned_lawyer_name,
     ecourts_url,
     notes,
-    created_by,
   } = body;
 
-  if (!org_id || !client_id || !case_number) {
+  if (!client_id || !case_number) {
     return NextResponse.json(
-      { error: "org_id, client_id, case_number are required" },
+      { error: "client_id and case_number are required" },
       { status: 400 },
     );
+  }
+
+  const supabase = getAdminSupabase();
+
+  // Verify the client belongs to caller's org before creating a case for them
+  const { data: client } = await supabase
+    .from("clients")
+    .select("org_id")
+    .eq("id", client_id)
+    .single();
+
+  if (!client || client.org_id !== ctx.orgId) {
+    return NextResponse.json({ error: "Client not found or forbidden" }, { status: 403 });
   }
 
   const { data, error } = await supabase
     .from("cases")
     .insert({
-      org_id,
+      org_id: ctx.orgId,
       client_id,
       case_number: case_number.trim(),
       court_name: court_name || null,
@@ -73,7 +100,7 @@ export async function POST(request: NextRequest) {
       assigned_lawyer_name: assigned_lawyer_name || null,
       ecourts_url: ecourts_url || null,
       notes: notes || null,
-      created_by: created_by || null,
+      created_by: ctx.userId,
     })
     .select()
     .single();
@@ -89,7 +116,7 @@ export async function POST(request: NextRequest) {
     old_value: null,
     new_value: status || "active",
     note: "Case created",
-    created_by: created_by || null,
+    created_by: ctx.userId,
   });
 
   return NextResponse.json(data, { status: 201 });

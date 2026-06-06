@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { FileText, Loader2, AlertCircle, Download, ArrowLeft, Maximize } from "lucide-react";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { FileText, Loader2, AlertCircle, Download, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import { DOC_TYPE_LABELS, type DocType } from "@/lib/types";
 
 export default function DocumentViewerPage() {
@@ -34,8 +34,8 @@ export default function DocumentViewerPage() {
         mime_type: data.mime_type,
         doc_type: data.doc_type,
       });
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading the document.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading the document.");
     } finally {
       setLoading(false);
     }
@@ -107,10 +107,13 @@ export default function DocumentViewerPage() {
       <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-4 sm:p-6">
         {doc.mime_type?.startsWith("image/") ? (
           <div className="w-full h-full flex items-center justify-center p-2 overflow-auto">
-            <img
+            <Image
               src={doc.url}
               alt={doc.name}
+              width={1200}
+              height={900}
               className="max-w-full max-h-[80vh] object-contain rounded-xl border border-white/[0.05]"
+              unoptimized
             />
           </div>
         ) : doc.name.endsWith(".doc") || doc.name.endsWith(".docx") ? (

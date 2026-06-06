@@ -19,7 +19,7 @@ export function getAdminSupabase(): SupabaseClient {
 // Proxy for backward compatibility
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop) {
-    return (getAdminSupabase() as any)[prop];
+    return (getAdminSupabase() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

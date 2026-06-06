@@ -114,8 +114,8 @@ export default function DashboardHome() {
         setOrgId(member.org_id);
         setUserName(member.full_name || "Counsellor");
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to load organization settings.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to load organization settings.");
       setLoading(false);
     }
   }, []);
@@ -178,18 +178,14 @@ export default function DashboardHome() {
         }
       });
 
-      // Combine database data with baseline trends for nice demo rendering
-      const mockMessages = [186, 305, 237, 273, 209, 314];
-      const mockCases = [12, 28, 18, 24, 15, 30];
-
-      const messagesData = monthsList.map((m, idx) => ({
+      const messagesData = monthsList.map((m) => ({
         month: m.month,
-        value: (mockMessages[idx] || 0) + (actualMessageCounts[m.month] || 0),
+        value: actualMessageCounts[m.month] || 0,
       }));
 
-      const casesData = monthsList.map((m, idx) => ({
+      const casesData = monthsList.map((m) => ({
         month: m.month,
-        value: (mockCases[idx] || 0) + (actualCaseCounts[m.month] || 0),
+        value: actualCaseCounts[m.month] || 0,
       }));
 
       setStats({
@@ -198,11 +194,11 @@ export default function DashboardHome() {
         botMessages: messages.length,
         docsUploaded: docsRes.count || 0,
         casesByStatus,
-        upcomingHearings: (hearingsRes.data || []) as any,
+        upcomingHearings: (hearingsRes.data || []) as Stats["upcomingHearings"],
         chartData: { messagesData, casesData },
       });
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading dashboard statistics.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading dashboard statistics.");
     } finally {
       setLoading(false);
     }
@@ -238,10 +234,10 @@ export default function DashboardHome() {
   }, []);
 
   const statCards = [
-    { label: "Total Clients", value: stats?.totalClients ?? 0, change: 12.5, changeLabel: "from last month", href: "/clients", icon: Users },
-    { label: "Active Cases", value: stats?.activeCases ?? 0, change: 8.2, changeLabel: "from last month", href: "/cases", icon: Briefcase },
-    { label: "Bot Messages", value: stats?.botMessages ?? 0, change: 18.4, changeLabel: "from last week", href: "/chat", icon: MessageSquare },
-    { label: "Documents Stored", value: stats?.docsUploaded ?? 0, change: -4.1, changeLabel: "from last month", href: "/documents", icon: FolderOpen },
+    { label: "Total Clients", value: stats?.totalClients ?? 0, href: "/clients", icon: Users },
+    { label: "Active Cases", value: stats?.activeCases ?? 0, href: "/cases", icon: Briefcase },
+    { label: "Bot Messages", value: stats?.botMessages ?? 0, href: "/chat", icon: MessageSquare },
+    { label: "Documents Stored", value: stats?.docsUploaded ?? 0, href: "/documents", icon: FolderOpen },
   ];
 
   return (
@@ -255,7 +251,7 @@ export default function DashboardHome() {
               {currentGreeting}, {userName || "Counsel"} ✨
             </h1>
             <p className="text-white/40 text-xs sm:text-sm font-medium">
-              Here is your law firm's dashboard overview.
+              Here is your law firm&apos;s dashboard overview.
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-[11px] font-semibold text-white/50 w-fit">
@@ -314,7 +310,7 @@ export default function DashboardHome() {
         <>
           {/* Stat cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {statCards.map(({ label, value, change, changeLabel, href, icon: Icon }) => (
+            {statCards.map(({ label, value, href, icon: Icon }) => (
               <Link key={label} href={href} className="block transition-premium">
                 <div className="bg-surface border border-border-default rounded-2xl p-5 transition-premium glow-hover-zinc relative overflow-hidden group">
                   <div className="absolute -inset-px bg-radial from-foreground/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
@@ -325,13 +321,6 @@ export default function DashboardHome() {
                     </div>
                   </div>
                   <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground mt-2">{value}</div>
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px]">
-                    <span className={change >= 0 ? "text-foreground/80 font-semibold" : "text-text-secondary/50 font-semibold"}>
-                      {change >= 0 ? "+" : ""}
-                      {change}%
-                    </span>
-                    <span className="text-text-secondary/40">{changeLabel}</span>
-                  </div>
                 </div>
               </Link>
             ))}
@@ -530,7 +519,7 @@ export default function DashboardHome() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] text-foreground/80 font-semibold truncate group-hover:text-foreground transition-colors">{h.case_number}</p>
-                          <p className="text-[11px] text-text-secondary truncate">{(h.clients as any)?.name} · {h.court_name || "Court"}</p>
+                          <p className="text-[11px] text-text-secondary truncate">{(h.clients as { name: string })?.name} · {h.court_name || "Court"}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           {isToday && (

@@ -40,7 +40,7 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { Separator } from "@/components/ui/separator";
+
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -116,14 +116,15 @@ export default function DashboardLayout({
         .single();
 
       if (member?.organizations) {
-        const org = member.organizations as any;
-        setOrgName(org.name || "Your Firm");
+        const org = member.organizations as { name?: string } | null;
+        setOrgName(org?.name || "Your Firm");
       }
     } catch {
       // Fail silently
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount
   useEffect(() => { void loadUser(); }, [loadUser]);
 
   async function handleLogout() {

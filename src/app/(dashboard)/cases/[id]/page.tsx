@@ -44,7 +44,8 @@ const NEUTRAL_STATUS_COLORS: Record<CaseStatus, string> = {
 };
 export default function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  // router kept for potential future navigation use
+  void useRouter;
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +67,8 @@ export default function CaseDetailPage() {
       setCaseData(data);
       setNewStatus(data.status);
       setNewHearing(data.next_hearing_date || "");
-    } catch (e: any) {
-      setError(e.message || "An unexpected error occurred while loading the case details.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An unexpected error occurred while loading the case details.");
     } finally {
       setLoading(false);
     }
@@ -92,8 +93,8 @@ export default function CaseDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text() || "Failed to save update.");
       await loadCase();
-    } catch (e: any) {
-      alert(e.message || "Failed to update case.");
+    } catch (e: unknown) {
+      alert((e as Error).message || "Failed to update case.");
     } finally {
       setUpdating(false);
     }
@@ -107,7 +108,7 @@ export default function CaseDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: (caseData.clients as any).id || caseData.clients,
+          client_id: caseData.clients.id,
           case_id: id,
           type: "hearing_reminder",
         }),
