@@ -144,6 +144,23 @@ export default function ChatPage() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [input]);
 
+  // Initial fetch of conversations
+  useEffect(() => {
+    async function loadConversations() {
+      try {
+        const res = await fetch("/api/conversations");
+        const body = await res.text();
+        if (res.ok) {
+          const data: ConversationWithLastMessage[] = body ? JSON.parse(body) : [];
+          setChatState({ conversations: data, sidebarLoading: false });
+        }
+      } catch {
+        setChatState({ sidebarLoading: false, sidebarError: "Failed to load conversations" });
+      }
+    }
+    void loadConversations();
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
     const ch = supabase.channel("rt-chat")

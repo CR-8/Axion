@@ -188,12 +188,17 @@ async function processMessage({
       orgId = orgSettings?.org_id ?? null;
     }
 
-    // Find or create conversation
-    let { data: conversation } = await supabase
+    // Find conversation by (org_id, phone) for proper tenant scoping
+    let lookup = supabase
       .from("conversations")
       .select("*")
-      .eq("phone", phone)
-      .single<Conversation>();
+      .eq("phone", phone);
+
+    if (orgId) {
+      lookup = lookup.eq("org_id", orgId);
+    }
+
+    let { data: conversation } = await lookup.single<Conversation>();
 
     if (!conversation) {
       const { data: newConvo } = await supabase
@@ -252,3 +257,6 @@ async function processMessage({
     console.error("Webhook processing error:", err);
   }
 }
+
+// ── Separator: ensure this file can be found by tools ────────
+// End of webhook handler

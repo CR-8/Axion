@@ -31,6 +31,18 @@ export async function PATCH(request: NextRequest) {
   const ctx = await getUserOrgId(request);
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Admin-only: verify the caller has admin role
+  const supabaseForRole = getAdminSupabase();
+  const { data: member } = await supabaseForRole
+    .from("org_members")
+    .select("role")
+    .eq("user_id", ctx.userId)
+    .eq("org_id", ctx.orgId)
+    .single();
+  if (!member || member.role !== "admin") {
+    return NextResponse.json({ error: "Only admins can modify settings." }, { status: 403 });
+  }
+
   const body = await request.json() as Record<string, unknown>;
 
   const allowed = [

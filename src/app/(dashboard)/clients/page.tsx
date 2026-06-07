@@ -326,13 +326,14 @@ function ClientsTableWrapper() {
       },
       enableSorting: false,
     }
-  ], [copiedId, isAllSelected, selectedIds]);
+  ], [copiedId, isAllSelected, selectedIds, toggleSelectAll]);
 
   // Filter columns based on visible state
   const filteredColumns = useMemo(() => {
     return columns.filter(col => {
       if (col.id === "select" || col.id === "actions") return true;
-      const key = (col as any).accessorKey as keyof typeof visibleColumns;
+      const key = (col as { accessorKey?: string }).accessorKey as keyof typeof visibleColumns | undefined;
+      if (!key) return true;
       return visibleColumns[key] ?? true;
     });
   }, [columns, visibleColumns]);
@@ -428,7 +429,7 @@ function ClientsTableWrapper() {
             <span className="text-text-secondary">Active Filters:</span>
             {search && (
               <span className="flex items-center gap-1 bg-muted/60 text-foreground px-2 py-1 rounded-lg border border-border-default">
-                Search: "{search}"
+                Search: &ldquo;{search}&rdquo;
                 <button onClick={() => setSearch("")} className="hover:text-rose-400 font-bold ml-1 cursor-pointer">×</button>
               </span>
             )}

@@ -25,6 +25,13 @@ export interface CourtDataProvider {
 
 // ── Mock Provider ────────────────────────────────────────────
 // Returns realistic-looking court data for hackathon demos.
+//
+// ⚠️ HACKATHON NOTE: This is a simulated court data provider.
+// The architecture is provider-based, so official eCourts/API
+// integration can replace the mock. In production, swap
+// MockCourtProvider for a provider that calls the official
+// eCourts API (api.ecourts.gov.in) or a third-party legal
+// data service.
 
 const MOCK_UPDATES: CourtUpdateData[] = [
   {

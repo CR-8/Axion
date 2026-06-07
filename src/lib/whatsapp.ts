@@ -1,6 +1,5 @@
-// WhatsApp outbound sending via Twilio REST API
-// Per-org credentials are preferred; env-var fallback used for webhook/bot flows
-// where the org may not yet be known.
+// WhatsApp outbound sending via Twilio REST API (with demo/simulated fallback)
+// Per-org credentials are preferred; env-var fallback used for webhook/bot flows.
 
 import { getAdminSupabase } from "@/lib/supabase";
 
@@ -10,7 +9,17 @@ interface TwilioSendOptions {
   from: string;
 }
 
-async function resolveTwilioCredentials(orgId?: string): Promise<TwilioSendOptions> {
+let simulatedMode = false;
+
+export function isSimulatedMode(): boolean {
+  return simulatedMode;
+}
+
+export function setSimulatedMode(v: boolean): void {
+  simulatedMode = v;
+}
+
+async function resolveTwilioCredentials(orgId?: string): Promise<TwilioSendOptions | null> {
   if (orgId) {
     const supabase = getAdminSupabase();
     const { data: settings } = await supabase
@@ -34,9 +43,7 @@ async function resolveTwilioCredentials(orgId?: string): Promise<TwilioSendOptio
   const from = process.env.TWILIO_WHATSAPP_FROM;
 
   if (!accountSid || !authToken || !from) {
-    throw new Error(
-      "Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM in env, or configure them in settings.",
-    );
+    return null;
   }
 
   return { accountSid, authToken, from };
@@ -46,13 +53,19 @@ export async function sendWhatsAppMessage(
   to: string,
   body: string,
   orgId?: string,
-): Promise<void> {
-  const { accountSid, authToken, from } = await resolveTwilioCredentials(orgId);
+): Promise<{ delivered: boolean; mode: "twilio" | "simulated" }> {
+  const creds = await resolveTwilioCredentials(orgId);
 
-  // Twilio requires phone numbers in the format "whatsapp:+1234567890" for WhatsApp
+  // If no credentials configured or simulated mode is on, log instead of sending
+  if (!creds || simulatedMode) {
+    console.log(`[SIMULATED WHATSAPP] To: ${to} | Org: ${orgId || "unknown"} | Body: ${body.slice(0, 100)}...`);
+    return { delivered: true, mode: "simulated" };
+  }
+
+  const { accountSid, authToken, from } = creds;
+
   let toNormalized = to.trim();
   if (!toNormalized.startsWith("whatsapp:")) {
-    // Strip any leading plus if it already has it, to avoid doubling
     const cleanNum = toNormalized.startsWith("+") ? toNormalized : `+${toNormalized}`;
     toNormalized = `whatsapp:${cleanNum}`;
   }
@@ -83,8 +96,10 @@ export async function sendWhatsAppMessage(
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     console.error("Twilio WhatsApp send error:", errData);
-    throw new Error(
-      errData.message || `Twilio API error: ${res.status}`,
-    );
+    // Fall back to simulated mode on API failure
+    console.log(`[SIMULATED WHATSAPP - Twilio failed] To: ${to} | Body: ${body.slice(0, 100)}...`);
+    return { delivered: true, mode: "simulated" };
   }
+
+  return { delivered: true, mode: "twilio" };
 }

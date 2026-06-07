@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { Users, Briefcase, FolderOpen, Calendar, Bot, ArrowUpRight, AlertCircle, Sparkles, Clock, MessageSquare, Plus, CheckCircle2, ShieldAlert, ArrowRight, ShieldCheck, UserCheck, Settings } from "lucide-react";
+import { Users, Briefcase, FolderOpen, Calendar, Bot, ArrowUpRight, AlertCircle, Sparkles, Clock, MessageSquare, ShieldAlert, ArrowRight, ShieldCheck, UserCheck, Settings } from "lucide-react";
 import Link from "next/link";
 import { CASE_STATUS_LABELS, type CaseStatus } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +19,7 @@ interface Stats {
     content: string;
     role: "user" | "assistant";
     created_at: string;
-    conversations: { name: string | null; phone: string } | null;
+    conversations: { name: string | null; phone: string | null } | null;
   }>;
   upcomingHearings: Array<{
     id: string;
@@ -148,16 +148,21 @@ export default function DashboardHome() {
       const humanCount = convos.filter(c => c.mode === "human").length;
 
       // Unpack lastMessages typed nicely
-      const messagesFeed = (lastMessagesRes.data || []).map((m: any) => ({
-        id: m.id,
-        content: m.content,
-        role: m.role as "user" | "assistant",
-        created_at: m.created_at,
-        conversations: m.conversations ? {
-          name: m.conversations.name,
-          phone: m.conversations.phone
-        } : null
-      }));
+      const messagesFeed = (lastMessagesRes.data || []).map((m: Record<string, unknown>) => {
+        const conv = (
+          Array.isArray(m.conversations) ? m.conversations[0] : m.conversations
+        ) as { name?: string; phone?: string } | null;
+        return {
+          id: m.id as string,
+          content: m.content as string,
+          role: m.role as "user" | "assistant",
+          created_at: m.created_at as string,
+          conversations: conv ? {
+            name: conv.name ?? null,
+            phone: conv.phone ?? null,
+          } : null,
+        };
+      });
 
       // Count total messages for stat counter
       const { count: msgCount } = await supabase.from("messages")
@@ -171,7 +176,13 @@ export default function DashboardHome() {
         unverifiedConvos: unverifiedRes.data || [],
         recentCaseChanges: recentCasesRes.data || [],
         lastMessages: messagesFeed,
-        upcomingHearings: (hearingsRes.data || []) as any,
+        upcomingHearings: ((hearingsRes.data || []) as unknown) as Array<{
+    id: string;
+    case_number: string;
+    next_hearing_date: string;
+    clients: { name: string } | null;
+    court_name: string | null;
+  }>,
         agentCount,
         humanCount,
       });
@@ -258,6 +269,47 @@ export default function DashboardHome() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in-up">
+      {/* Demo Command Center Banner */}
+      <div className="rounded-2xl p-5 relative overflow-hidden bg-gradient-to-r from-zinc-900/90 via-zinc-800/80 to-zinc-900/90 border border-zinc-700/50 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <Sparkles className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white tracking-tight">Demo Command Center</h2>
+              <p className="text-[11px] text-white/50 mt-0.5">
+                Active cases · Upcoming hearings · Messages handled by bot · Human takeovers · Unverified sessions
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/chat" className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg transition-colors">
+              Live Chat
+            </Link>
+            <Link href="/settings" className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-[11px] font-semibold rounded-lg transition-colors">
+              Config
+            </Link>
+          </div>
+        </div>
+
+        {/* Workflow diagram */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-2 text-[10px]">
+          {[
+            { step: "1", label: "Client messages\nWhatsApp", icon: "💬" },
+            { step: "2", label: "Bot verifies\nCase ID + name", icon: "✅" },
+            { step: "3", label: "AI responds\nlive case info", icon: "🤖" },
+            { step: "4", label: "Lawyer monitors\ndashboard", icon: "👨‍⚖️" },
+            { step: "5", label: "Court update\nnotifications", icon: "📋" },
+          ].map(({ step, label, icon }) => (
+            <div key={step} className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-lg px-2.5 py-2">
+              <span className="size-5 rounded-full bg-white/10 text-white/70 flex items-center justify-center text-[9px] font-bold shrink-0">{step}</span>
+              <span className="text-white/60 leading-tight whitespace-pre-line">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Greeting Banner */}
       <div className="rounded-2xl p-6 relative overflow-hidden bg-surface border border-border-default shadow-sm">
         <div className="absolute top-0 right-0 w-80 h-80 bg-foreground/[0.01] rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
@@ -267,7 +319,7 @@ export default function DashboardHome() {
               {currentGreeting}, {userName || "Counsel"}
             </h1>
             <p className="text-text-secondary/70 text-xs sm:text-sm font-medium">
-              Welcome to LexBot Legal Operations Command Center.
+              Legal case communication &amp; workflow automation for law firms.
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-muted border border-border-default rounded-xl text-[11px] font-semibold text-text-secondary w-fit font-mono">

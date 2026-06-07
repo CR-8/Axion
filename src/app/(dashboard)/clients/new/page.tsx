@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Loader2, Copy, AlertCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { LANGUAGES, CASE_STATUS_LABELS, CASE_TYPE_LABELS } from "@/lib/types";
@@ -10,7 +9,6 @@ import { LANGUAGES, CASE_STATUS_LABELS, CASE_TYPE_LABELS } from "@/lib/types";
 const STEPS = ["Personal Info", "Case Details (Optional)", "Review & Create"];
 
 export default function NewClientPage() {
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,19 +212,27 @@ export default function NewClientPage() {
                   className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label htmlFor="client-phone" className="text-white/50 text-[10px] font-bold uppercase tracking-wider">WhatsApp Number *</label>
-                <input
-                  id="client-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+919876543210"
-                  required
-                  autoComplete="tel"
-                  className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono"
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="client-phone" className="text-white/50 text-[10px] font-bold uppercase tracking-wider">WhatsApp Number *</label>
+                    <input
+                      id="client-phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+919876543210"
+                      list="phone-prefixes"
+                      required
+                      autoComplete="tel"
+                      className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono"
+                    />
+                    <datalist id="phone-prefixes">
+                      <option value="+919876543210" />
+                      <option value="+919821234567" />
+                      <option value="+917654321098" />
+                      <option value="+918888877777" />
+                      <option value="+919999988877" />
+                    </datalist>
+                  </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
@@ -269,10 +275,28 @@ export default function NewClientPage() {
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Main Street, Mumbai"
+                placeholder="e.g. 123 Main Street, Mumbai"
+                list="city-suggestions"
                 autoComplete="street-address"
                 className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
               />
+              <datalist id="city-suggestions">
+                <option value="Mumbai, Maharashtra" />
+                <option value="Delhi, Delhi" />
+                <option value="Bangalore, Karnataka" />
+                <option value="Chennai, Tamil Nadu" />
+                <option value="Hyderabad, Telangana" />
+                <option value="Kolkata, West Bengal" />
+                <option value="Ahmedabad, Gujarat" />
+                <option value="Pune, Maharashtra" />
+                <option value="Jaipur, Rajasthan" />
+                <option value="Lucknow, Uttar Pradesh" />
+                <option value="Chandigarh, Punjab" />
+                <option value="Bhopal, Madhya Pradesh" />
+                <option value="Patna, Bihar" />
+                <option value="Thane, Maharashtra" />
+                <option value="Surat, Gujarat" />
+              </datalist>
             </div>
 
             <div className="space-y-1.5">
@@ -321,10 +345,20 @@ export default function NewClientPage() {
                       type="text"
                       value={caseNumber}
                       onChange={(e) => setCaseNumber(e.target.value)}
-                      placeholder="OS/123/2026"
+                      placeholder="e.g. OS/123/2026 or CC/2026/0042"
+                      list="case-number-formats"
                       required={createCaseToo}
                       className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono"
                     />
+                    <datalist id="case-number-formats">
+                      <option value="OS/123/2026" />
+                      <option value="CC/2026/0042" />
+                      <option value="CIVIL/42/2026" />
+                      <option value="CRIM/156/2026" />
+                      <option value="WP/2026/00123" />
+                      <option value="FA/2026/0089" />
+                      <option value="LF-2024-0042" />
+                    </datalist>
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="case-type" className="text-white/50 text-[10px] font-bold uppercase tracking-wider">Case Type</label>
@@ -349,9 +383,30 @@ export default function NewClientPage() {
                       type="text"
                       value={courtName}
                       onChange={(e) => setCourtName(e.target.value)}
-                      placeholder="High Court of Bombay"
+                      placeholder="Select or type court name"
+                      list="court-names"
                       className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                     />
+                    <datalist id="court-names">
+                      <option value="Supreme Court of India" />
+                      <option value="High Court of Bombay" />
+                      <option value="High Court of Delhi" />
+                      <option value="High Court of Calcutta" />
+                      <option value="High Court of Madras" />
+                      <option value="High Court of Karnataka" />
+                      <option value="High Court of Gujarat" />
+                      <option value="High Court of Allahabad" />
+                      <option value="High Court of Punjab & Haryana" />
+                      <option value="High Court of Rajasthan" />
+                      <option value="City Civil Court, Mumbai" />
+                      <option value="District Court, Delhi" />
+                      <option value="District Court, Bangalore" />
+                      <option value="Sessions Court, Pune" />
+                      <option value="Family Court, Mumbai" />
+                      <option value="Consumer Disputes Redressal Forum" />
+                      <option value="Debt Recovery Tribunal" />
+                      <option value="National Company Law Tribunal" />
+                    </datalist>
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="court-city" className="text-white/50 text-[10px] font-bold uppercase tracking-wider">Court City</label>
@@ -360,9 +415,27 @@ export default function NewClientPage() {
                       type="text"
                       value={courtCity}
                       onChange={(e) => setCourtCity(e.target.value)}
-                      placeholder="Mumbai"
+                      placeholder="Select or type city"
+                      list="court-cities"
                       className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                     />
+                    <datalist id="court-cities">
+                      <option value="Mumbai" />
+                      <option value="Delhi" />
+                      <option value="Bangalore" />
+                      <option value="Chennai" />
+                      <option value="Kolkata" />
+                      <option value="Hyderabad" />
+                      <option value="Ahmedabad" />
+                      <option value="Pune" />
+                      <option value="Jaipur" />
+                      <option value="Lucknow" />
+                      <option value="Chandigarh" />
+                      <option value="Bhopal" />
+                      <option value="Patna" />
+                      <option value="Surat" />
+                      <option value="Thane" />
+                    </datalist>
                   </div>
                 </div>
 
@@ -400,8 +473,21 @@ export default function NewClientPage() {
                     value={assignedLawyerName}
                     onChange={(e) => setAssignedLawyerName(e.target.value)}
                     placeholder="Adv. Harish Salve"
+                    list="lawyer-name-suggestions"
                     className="w-full bg-white/[0.05] border border-white/[0.09] rounded-xl px-4 py-2.5 text-sm text-white/85 placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                   />
+                  <datalist id="lawyer-name-suggestions">
+                    <option value="Adv. Harish Salve" />
+                    <option value="Adv. Fali S. Nariman" />
+                    <option value="Adv. Abhishek Singhvi" />
+                    <option value="Adv. Mukul Rohatgi" />
+                    <option value="Adv. K. K. Venugopal" />
+                    <option value="Adv. Gopal Subramanium" />
+                    <option value="Adv. P. Chidambaram" />
+                    <option value="Adv. Kapil Sibal" />
+                    <option value="Adv. C. A. Sundaram" />
+                    <option value="Adv. Arvind Datar" />
+                  </datalist>
                 </div>
 
                 <div className="space-y-1.5">

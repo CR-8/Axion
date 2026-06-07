@@ -180,10 +180,20 @@ export default function NewCasePage() {
               type="text"
               value={caseNumber}
               onChange={(e) => setCaseNumber(e.target.value)}
-              placeholder="LF-2024-0042"
+              placeholder="e.g. CC/2026/0042 or LF-2024-0042"
+              list="case-number-formats"
               required
               className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/20 outline-none focus:border-white/20 transition-colors font-mono"
             />
+            <datalist id="case-number-formats">
+              <option value="OS/123/2026" />
+              <option value="CC/2026/0042" />
+              <option value="CIVIL/42/2026" />
+              <option value="CRIM/156/2026" />
+              <option value="WP/2026/00123" />
+              <option value="FA/2026/0089" />
+              <option value="LF-2024-0042" />
+            </datalist>
           </div>
 
           <div className="space-y-1.5">
@@ -207,9 +217,29 @@ export default function NewCasePage() {
               type="text"
               value={courtName}
               onChange={(e) => setCourtName(e.target.value)}
-              placeholder="Mumbai City Civil Court"
+              placeholder="Select or type court name"
+              list="court-names"
               className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/20 outline-none focus:border-white/20 transition-colors"
             />
+            <datalist id="court-names">
+              <option value="Supreme Court of India" />
+              <option value="High Court of Bombay" />
+              <option value="High Court of Delhi" />
+              <option value="High Court of Calcutta" />
+              <option value="High Court of Madras" />
+              <option value="High Court of Karnataka" />
+              <option value="High Court of Gujarat" />
+              <option value="High Court of Allahabad" />
+              <option value="High Court of Punjab & Haryana" />
+              <option value="City Civil Court, Mumbai" />
+              <option value="District Court, Delhi" />
+              <option value="District Court, Bangalore" />
+              <option value="Sessions Court, Pune" />
+              <option value="Family Court, Mumbai" />
+              <option value="Consumer Disputes Redressal Forum" />
+              <option value="Debt Recovery Tribunal" />
+              <option value="National Company Law Tribunal" />
+            </datalist>
           </div>
 
           <div className="space-y-1.5">
@@ -219,9 +249,26 @@ export default function NewCasePage() {
               type="text"
               value={courtCity}
               onChange={(e) => setCourtCity(e.target.value)}
-              placeholder="Mumbai"
+              placeholder="Select or type city"
+              list="court-cities"
               className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/20 outline-none focus:border-white/20 transition-colors"
             />
+            <datalist id="court-cities">
+              <option value="Mumbai" />
+              <option value="Delhi" />
+              <option value="Bangalore" />
+              <option value="Chennai" />
+              <option value="Kolkata" />
+              <option value="Hyderabad" />
+              <option value="Ahmedabad" />
+              <option value="Pune" />
+              <option value="Jaipur" />
+              <option value="Lucknow" />
+              <option value="Chandigarh" />
+              <option value="Bhopal" />
+              <option value="Patna" />
+              <option value="Surat" />
+            </datalist>
           </div>
 
           <div className="space-y-1.5">
@@ -295,8 +342,16 @@ export default function NewCasePage() {
               value={ecourtsUrl}
               onChange={(e) => setEcourtsUrl(e.target.value)}
               placeholder="https://ecourts.gov.in/…"
+              list="ecourts-urls"
               className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/20 outline-none focus:border-white/20 transition-colors font-mono text-[12px]"
             />
+            <datalist id="ecourts-urls">
+              <option value="https://ecourts.gov.in/" />
+              <option value="https://services.ecourts.gov.in/" />
+              <option value="https://delhicourts.nic.in/" />
+              <option value="https://bombayhighcourt.nic.in/" />
+              <option value="https://www.sci.gov.in/" />
+            </datalist>
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">

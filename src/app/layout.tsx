@@ -20,7 +20,7 @@ const cormorantGaramond = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "LexBot CRM — Legal CRM with WhatsApp Bot",
+  title: "LexBot — Legal Case Communication & Workflow Automation",
   description: "Legal-first CRM SaaS with WhatsApp bot layer for law firms and legal agencies",
 };
 

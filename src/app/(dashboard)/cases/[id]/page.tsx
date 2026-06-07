@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Calendar, User, FileText, Clock, Loader2, CheckCircle2, AlertCircle, Edit2, Bell, Copy, Check, ExternalLink, ShieldCheck, MessageSquare, Plus, FileCode, RefreshCw, Satellite, Sparkles } from "lucide-react";
+import { ArrowLeft, User, FileText, Clock, Loader2, CheckCircle2, AlertCircle, Edit2, Bell, Copy, Check, ExternalLink, MessageSquare, Plus, RefreshCw, Satellite, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { CASE_STATUS_LABELS, CASE_TYPE_LABELS, type CaseStatus, type CaseType, type CaseMonitoring, type CaseUpdate } from "@/lib/types";
@@ -479,9 +479,9 @@ export default function CaseDetailPage() {
                       </div>
 
                       {ev.event_type === "note_added" && ev.new_value && (
-                        <div className="bg-background/60 border border-border-default/30 rounded-xl p-3 text-xs text-foreground/85 leading-relaxed font-sans mt-2 shadow-2xs italic">
-                          "{ev.new_value}"
-                        </div>
+                      <div className="bg-background/60 border border-border-default/30 rounded-xl p-3 text-xs text-foreground/85 leading-relaxed font-sans mt-2 shadow-2xs italic">
+                        &ldquo;{ev.new_value}&rdquo;
+                      </div>
                       )}
 
                       {ev.event_type !== "note_added" && ev.old_value && ev.new_value && (
@@ -614,7 +614,7 @@ export default function CaseDetailPage() {
               
               <div className="space-y-3.5">
                 <p className="text-[11px] text-text-secondary/70 leading-relaxed">
-                  Deliver a quick WhatsApp hearing alert message containing the registered court date directly to client's chat.
+                  Deliver a quick WhatsApp hearing alert message containing the registered court date directly to the client&apos;s chat.
                 </p>
 
                 <button

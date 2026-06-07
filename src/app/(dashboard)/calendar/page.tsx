@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Briefcase, MapPin, User, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { Skeleton } from "@/components/ui/skeleton";
+
 
 interface HearingEvent {
   id: string;
@@ -24,7 +24,7 @@ export default function CalendarPage() {
   // Calendar Navigation State
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [viewMode, setViewMode] = useState<"month" | "week">("month");
+  // viewMode: "month" | "week" — reserved for future toggle
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -38,8 +38,8 @@ export default function CalendarPage() {
       if (!user) return;
       const { data: m } = await supabase.from("org_members").select("org_id").eq("user_id", user.id).single();
       if (m?.org_id) setOrgId(m.org_id);
-    } catch (e: any) {
-      setError(e.message || "Failed to authenticate.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to authenticate.");
       setLoading(false);
     }
   }, []);
@@ -54,9 +54,9 @@ export default function CalendarPage() {
       const data = await res.json();
       
       // Filter cases that have a next hearing date
-      const hearingEvents = data
-        .filter((c: any) => c.next_hearing_date)
-        .map((c: any) => ({
+      const hearingEvents = (data as HearingEvent[])
+        .filter((c) => c.next_hearing_date)
+        .map((c) => ({
           id: c.id,
           case_number: c.case_number,
           next_hearing_date: c.next_hearing_date,
@@ -65,8 +65,8 @@ export default function CalendarPage() {
           clients: c.clients,
         }));
       setEvents(hearingEvents);
-    } catch (e: any) {
-      setError(e.message || "An error occurred fetching events.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "An error occurred fetching events.");
     } finally {
       setLoading(false);
     }

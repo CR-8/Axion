@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import { Settings, Bot, Zap, Bell, MessageSquare, Loader2, AlertCircle, Eye, EyeOff, CheckCircle2, ShieldCheck, HelpCircle, Check, X } from "lucide-react";
+import { Settings, Bot, Zap, Bell, MessageSquare, Loader2, AlertCircle, Eye, EyeOff, CheckCircle2, ShieldCheck, Check, Sparkles } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
@@ -33,6 +33,8 @@ export default function SettingsPage() {
 
   // Connection Test State
   const [testing, setTesting] = useState(false);
+  const [seedResults, setSeedResults] = useState<string[] | null>(null);
+  const [seedErrors, setSeedErrors] = useState<string[] | null>(null);
   const [testResults, setTestResults] = useState<{
     success: boolean;
     aiConnected: boolean;
@@ -137,7 +139,7 @@ export default function SettingsPage() {
       } else {
         toast.error("Credential testing failed on some integrations.");
       }
-    } catch (e: any) {
+    } catch {
       toast.error("Network error during test execution.");
     } finally {
       setTesting(false);
@@ -208,8 +210,8 @@ export default function SettingsPage() {
               {[
                 { label: "Twilio Account SID", value: phoneId, set: setPhoneId, id: "wa-phone-id", placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", sensitive: false },
                 { label: "Twilio Auth Token", value: accessToken, set: setAccessToken, id: "wa-token", placeholder: "••••••••••••••••••••••••••••••••", sensitive: true },
-                { label: "Twilio Sender Number", value: verifyToken, set: setVerifyToken, id: "wa-verify-token", placeholder: "whatsapp:+14155238886", sensitive: false },
-              ].map(({ label, value, set, id, placeholder, sensitive }) => (
+                { label: "Twilio Sender Number", value: verifyToken, set: setVerifyToken, id: "wa-verify-token", placeholder: "whatsapp:+14155238886", datalist: "twilio-numbers", sensitive: false },
+              ].map(({ label, value, set, id, placeholder, sensitive, datalist }: { label: string; value: string; set: (v: string) => void; id: string; placeholder: string; sensitive?: boolean; datalist?: string }) => (
                 <div key={id} className="space-y-1.5">
                   <label htmlFor={id} className="text-text-secondary text-[10px] font-bold uppercase tracking-wider">{label}</label>
                   <div className="relative">
@@ -219,6 +221,7 @@ export default function SettingsPage() {
                       value={value}
                       onChange={(e) => set(e.target.value)}
                       placeholder={placeholder}
+                      list={datalist}
                       className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/35 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono pr-10"
                     />
                     {sensitive && (
@@ -229,6 +232,11 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+              <datalist id="twilio-numbers">
+                <option value="whatsapp:+14155238886" />
+                <option value="whatsapp:+918080808080" />
+                <option value="+1234567890" />
+              </datalist>
             </TabsContent>
 
             {/* AI CONFIG */}
@@ -275,10 +283,34 @@ export default function SettingsPage() {
                   type="text" 
                   value={aiModel} 
                   onChange={(e) => setAiModel(e.target.value)}
-                  placeholder="openai/gpt-4o-mini"
+                  placeholder="Select or type model name"
+                  list={aiProvider === "openrouter" ? "openrouter-models" : "openai-models"}
                   className="w-full bg-background border border-border-default rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-text-secondary/35 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors font-mono" 
                 />
-                <p className="text-text-secondary/60 text-[11px] mt-0.5">OpenRouter format: provider/model-name (e.g. openai/gpt-4o-mini, anthropic/claude-3-haiku)</p>
+                <datalist id="openrouter-models">
+                  <option value="openai/gpt-4o-mini" />
+                  <option value="openai/gpt-4o" />
+                  <option value="openai/gpt-4-turbo" />
+                  <option value="openai/o3-mini" />
+                  <option value="anthropic/claude-3.5-sonnet" />
+                  <option value="anthropic/claude-3-haiku" />
+                  <option value="anthropic/claude-3-opus" />
+                  <option value="google/gemini-2.0-flash-001" />
+                  <option value="google/gemini-2.0-pro-exp-02-05" />
+                  <option value="meta-llama/llama-3.3-70b-instruct" />
+                  <option value="mistralai/mistral-7b-instruct" />
+                  <option value="deepseek/deepseek-chat" />
+                  <option value="cohere/command-r-plus" />
+                </datalist>
+                <datalist id="openai-models">
+                  <option value="gpt-4o-mini" />
+                  <option value="gpt-4o" />
+                  <option value="gpt-4-turbo" />
+                  <option value="gpt-3.5-turbo" />
+                  <option value="o3-mini" />
+                  <option value="o1-mini" />
+                </datalist>
+                <p className="text-text-secondary/60 text-[11px] mt-0.5">OpenRouter format: provider/model-name (e.g. openai/gpt-4o-mini). Changes based on selected provider.</p>
               </div>
             </TabsContent>
 
@@ -439,6 +471,57 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Seed Demo Data */}
+          <div className="bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-[13px] font-bold text-foreground flex items-center gap-2 uppercase tracking-wide">
+              <Sparkles className="size-4 text-amber-400" />
+              Demo Seed Data
+            </h2>
+            <p className="text-[11px] text-text-secondary/70 leading-relaxed">
+              One-click seed: creates a demo law firm, client (Rahul Sharma), case (CC/2026/0042), conversation, messages, and court updates.
+            </p>
+            <button
+              onClick={async () => {
+                setError(null);
+                try {
+                  const res = await fetch("/api/demo/seed", { method: "POST" });
+                  const data = await res.json();
+                  if (data.success) {
+                    toast.success("Demo data seeded! Org ID: " + data.org_id?.slice(0, 8) + "...");
+                    setSeedResults(data.results || []);
+                    setSeedErrors(data.errors || []);
+                  } else {
+                    toast.error(data.error || "Seed failed");
+                  }
+                } catch {
+                  toast.error("Network error seeding demo data.");
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              <Sparkles className="size-3.5" />
+              Seed Demo Data (for judges)
+            </button>
+            {seedResults && seedResults.length > 0 && (
+              <div className="space-y-1">
+                {seedResults.map((r: string, i: number) => (
+                  <div key={i} className="text-[10px] text-emerald-400/80 flex items-center gap-1">
+                    <Check className="size-3" /> {r}
+                  </div>
+                ))}
+              </div>
+            )}
+            {seedErrors && seedErrors.length > 0 && (
+              <div className="space-y-1">
+                {seedErrors.map((e: string, i: number) => (
+                  <div key={i} className="text-[10px] text-rose-400/80 flex items-center gap-1">
+                    <AlertCircle className="size-3" /> {e}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Test connection results box */}

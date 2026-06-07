@@ -105,7 +105,7 @@ export function CommandPalette() {
         )}
         
         {!loading && search && clients.length === 0 && cases.length === 0 && (
-          <CommandEmpty>No results found for "{search}".</CommandEmpty>
+          <CommandEmpty>No results found for &ldquo;{search}&rdquo;.</CommandEmpty>
         )}
 
         {!search && (

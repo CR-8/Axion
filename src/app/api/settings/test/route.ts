@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
           results.aiConnected = true;
           results.logs.push(`AI Provider connection verified successfully: model ${ai_model} responded.`);
         }
-      } catch (err: any) {
-        results.errors.push(`AI Testing Failed: ${err.message || err}`);
+      } catch (err: unknown) {
+        results.errors.push(`AI Testing Failed: ${(err as Error).message || String(err)}`);
       }
     } else {
       results.logs.push("AI Key empty. Skipping AI connection test.");
@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
         } else {
           results.errors.push(`Twilio Verification Failed: ${data.message || "Invalid Account SID or Auth Token"}`);
         }
-      } catch (err: any) {
-        results.errors.push(`Twilio Testing Network error: ${err.message || err}`);
+      } catch (err: unknown) {
+        results.errors.push(`Twilio Testing Network error: ${(err as Error).message || String(err)}`);
       }
     } else {
       results.logs.push("Twilio settings incomplete. Skipping credentials test.");
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       logs: results.logs
     });
 
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || err }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: (err as Error).message || String(err) }, { status: 500 });
   }
 }

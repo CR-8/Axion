@@ -45,9 +45,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ notifications: data || [], unreadCount: count || 0 });
-  } catch (err: any) {
-    console.error("Unhandled notifications fetch error:", err);
-    return NextResponse.json({ error: err.message, stack: err.stack }, { status: 500 });
+  } catch (err: unknown) {
+    const e = err as Error;
+    console.error("Unhandled notifications fetch error:", e);
+    return NextResponse.json({ error: e.message, stack: e.stack }, { status: 500 });
   }
 }
 

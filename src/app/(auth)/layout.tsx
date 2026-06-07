@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "LexBot CRM — Sign In",
+  title: "LexBot — Legal Case Communication",
   description: "Legal CRM for law firms with WhatsApp bot integration",
 };
 

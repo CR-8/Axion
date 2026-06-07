@@ -1,43 +1,31 @@
 import { NextRequest } from "next/server";
-import { getAdminSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { getUserOrgId, isAuthorized } from "@/lib/auth-guard";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const ctx = await getUserOrgId(request);
-  if (!ctx) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id } = await params;
-  const supabase = getAdminSupabase();
-
-  // Get conversation and verify org ownership
-  const { data: conversation, error: convoError } = await supabase
-    .from("conversations")
-    .select("phone, org_id")
-    .eq("id", id)
-    .single();
-
-  if (convoError || !conversation) {
-    return Response.json({ error: "Conversation not found" }, { status: 404 });
-  }
-  if (!isAuthorized(ctx, conversation.org_id as string)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const body = await request.json() as { message?: string };
+  const body = await request.json();
   const { message } = body;
 
   if (!message?.trim()) {
     return Response.json({ error: "Message is required" }, { status: 400 });
   }
 
-  // Send via Meta Cloud API (using org's credentials)
-  await sendWhatsAppMessage(conversation.phone as string, message, ctx.orgId);
+  const { data: conversation, error: convoError } = await supabase
+    .from("conversations")
+    .select("phone")
+    .eq("id", id)
+    .single();
 
-  // Store in DB
+  if (convoError || !conversation) {
+    return Response.json({ error: "Conversation not found" }, { status: 404 });
+  }
+
+  await sendWhatsAppMessage(conversation.phone, message);
+
   const { data: msg, error: msgError } = await supabase
     .from("messages")
     .insert({

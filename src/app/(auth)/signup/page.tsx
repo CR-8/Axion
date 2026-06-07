@@ -86,7 +86,7 @@ export default function SignupPage() {
           <div className="inline-flex size-12 rounded-2xl bg-white/5 border border-white/10 items-center justify-center text-white">
             <Scale className="size-6" strokeWidth={1.5} />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white mt-1">LexBot CRM</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white mt-1">LexBot — Legal Case Comms</h1>
         </div>
 
         {/* Step indicator */}
@@ -195,10 +195,33 @@ export default function SignupPage() {
                   <Input
                     id="city"
                     type="text"
-                    placeholder="Mumbai"
+                    placeholder="Select or type your city"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
+                    list="firm-cities"
                   />
+                  <datalist id="firm-cities">
+                    <option value="Mumbai" />
+                    <option value="Delhi" />
+                    <option value="Bangalore" />
+                    <option value="Chennai" />
+                    <option value="Kolkata" />
+                    <option value="Hyderabad" />
+                    <option value="Ahmedabad" />
+                    <option value="Pune" />
+                    <option value="Jaipur" />
+                    <option value="Lucknow" />
+                    <option value="Chandigarh" />
+                    <option value="Bhopal" />
+                    <option value="Patna" />
+                    <option value="Surat" />
+                    <option value="New Delhi" />
+                    <option value="Gurgaon" />
+                    <option value="Noida" />
+                    <option value="Nagpur" />
+                    <option value="Indore" />
+                    <option value="Thane" />
+                  </datalist>
                 </div>
               </>
             )}

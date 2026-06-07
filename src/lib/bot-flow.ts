@@ -165,6 +165,15 @@ async function handleAwaitingName(ctx: BotContext) {
     })
     .eq("id", ctx.conversation.id);
 
+  // Audit log: client verification event
+  await supabase.from("case_events").insert({
+    case_id: caseData.id,
+    event_type: "note_added",
+    new_value: `Client verified via WhatsApp: ${client.name} (${client.phone})`,
+    note: "Client verified via WhatsApp bot",
+    created_by_name: "WhatsApp Bot",
+  });
+
   const statusLabel = CASE_STATUS_LABELS[caseData.status as keyof typeof CASE_STATUS_LABELS] || caseData.status;
   const hearingDate = caseData.next_hearing_date
     ? new Date(caseData.next_hearing_date).toLocaleDateString("en-IN", {
@@ -244,7 +253,7 @@ async function handleVerified(ctx: BotContext) {
             year: "numeric",
           })
         : "Not scheduled";
-      reply = `📋 *Case Status Update*\n\n*Case:* ${activeCase.case_number}\n*Court:* ${activeCase.court_name || "N/A"}, ${activeCase.court_city || ""}\n*Status:* ${statusLabel}\n*Next Hearing:* ${hearing}\n*Lawyer:* ${activeCase.assigned_lawyer_name || "Not assigned"}`;
+      reply = `📋 *Case Status Update*\n\n*Case:* ${activeCase.case_number}\n*Court:* ${activeCase.court_name || "N/A"}, ${activeCase.court_city || ""}\n*Status:* ${statusLabel}\n*Next Hearing:* ${hearing}\n*Lawyer:* ${activeCase.assigned_lawyer_name || "Not assigned"}\n\n_⚠️ Not legal advice. Source: case record._`;
       break;
     }
 
@@ -256,7 +265,7 @@ async function handleVerified(ctx: BotContext) {
             year: "numeric",
           })
         : "Not scheduled yet";
-      reply = `📅 *Next Hearing*\n\n*Case:* ${activeCase.case_number}\n*Court:* ${activeCase.court_name || "N/A"}\n*Date:* ${hearing}\n\nPlease be present or inform your lawyer if you cannot attend.`;
+      reply = `📅 *Next Hearing*\n\n*Case:* ${activeCase.case_number}\n*Court:* ${activeCase.court_name || "N/A"}\n*Date:* ${hearing}\n\nPlease be present or inform your lawyer if you cannot attend.\n\n_⚠️ Not legal advice. Source: case record._`;
       break;
     }
 

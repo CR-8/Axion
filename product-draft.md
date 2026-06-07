@@ -1,15 +1,21 @@
-# LexBot CRM — Product Feature Draft
-> Legal-first CRM SaaS with WhatsApp bot layer  
-> Hackathon: June 6–7 | Team: 4 members
+# LexBot — Legal Case Communication & Workflow Automation
+> **PS-2: Legal Governance / Case Workflow Automation**  
+> Hareathon: June 6–7 | Team: 4 members
+
+---
+
+## Elevator Pitch
+
+> **LexBot automates legal case communication for law firms by giving clients verified WhatsApp access to hearing dates, case status, documents, and legal updates — in any language, without downloading anything new.**
 
 ---
 
 ## What This Product Is
 
-A multi-tenant SaaS CRM built for legal agencies (law firms, legal aid NGOs, court-facing agencies) that gives their clients 24/7 WhatsApp-based access to their own case information — in any language — without building or downloading anything new.
+LexBot is a multi-tenant legal case communication and workflow automation platform built for law firms, legal aid NGOs, and court-facing agencies. It replaces fragmented phone calls, paper notices, and missed hearings with a single verified WhatsApp channel.
 
 **The core loop:**
-> Lawyer creates client + case in CRM → Client messages WhatsApp bot → Bot identifies client via case ID → AI responds with live case data in client's language
+> Lawyer creates client + case in CRM → Client messages WhatsApp with Case ID → Bot verifies identity → AI responds with live case data → Lawyer monitors dashboard for takeovers → Court updates trigger WhatsApp notifications
 
 ---
 
@@ -194,27 +200,23 @@ Metrics visible to Admin only:
 
 ---
 
-## Module 7 — eCourts Integration
+## Module 7 — Court Data Integration
 
-### Hackathon scope: Manual URL import
-- Lawyer pastes case URL from ecourts.gov.in
-- Backend fetches page once, parses next hearing date
-- Auto-fills hearing date field in case form
-- Not a live sync — one-time import per case update
+### Current (Hackathon Demo): Mock Court Provider
+For hackathon demo, we simulate a court data provider with realistic-looking updates (hearing adjourned, order copy available, next date fixed). The architecture is provider-based, so official eCourts/API integration can replace the mock.
 
-### Product V1: Scheduled sync
-- Cron job runs daily per active case
-- Fetches latest status from eCourts
-- Updates case status and hearing date automatically
-- Notifies assigned lawyer if status changed
-- Notifies client via WhatsApp if hearing date changed
+> ⚠️ HACKATHON NOTE: We use a simulated court data provider for this demo. The provider interface (`CourtDataProvider`) is designed to be swapped — official eCourts API (api.ecourts.gov.in) or any third-party legal data service can replace the mock without changing the rest of the system.
 
-### Roadmap: Official API
-- Apply for access to api.ecourts.gov.in (government authorization required)
-- Replace scraper with official data feed
-- Covers all district courts, high courts, Supreme Court
+### Product V1: Official API Integration
+- Replace `MockCourtProvider` with an API adapter for eCourts or subscribed legal data service
+- Scheduled sync per active case
+- Auto-update case status and hearing dates
+- WhatsApp notifications on court updates
 
-> ⚠️ Note: Scraping government websites is a ToS gray area. Frame as "eCourts sync" in pitch, not "scraping." Position official API access as the roadmap destination.
+### Roadmap
+- Multi-court support (district, high court, Supreme Court)
+- Predictive hearing scheduling
+- Integration with case management software APIs
 
 ---
 

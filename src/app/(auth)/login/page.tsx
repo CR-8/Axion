@@ -41,18 +41,18 @@ function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
         <div className="flex flex-col gap-6">
           {/* Header */}
           <div className="flex flex-col items-center gap-2 text-center">
-            <a
+            <Link
               href="/"
               className="flex flex-col items-center gap-2 font-medium"
             >
               <div className="flex size-10 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white">
                 <Scale className="size-5" strokeWidth={1.5} />
               </div>
-              <span className="sr-only">LexBot CRM</span>
-            </a>
-            <h1 className="text-xl font-bold text-white">Welcome to LexBot CRM</h1>
+              <span className="sr-only">LexBot</span>
+            </Link>
+            <h1 className="text-xl font-bold text-white">LexBot — Legal Case Communication</h1>
             <p className="text-sm text-white/40">
-              Don&apos;t have an account?{" "}
+              Verified WhatsApp access for clients. Automated case workflow. Don&apos;t have an account?{" "}
               <Link href="/signup" className="text-white/70 underline underline-offset-4 hover:text-white transition-colors">
                 Sign up
               </Link>

@@ -82,13 +82,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Send WhatsApp welcome message (no phantom case created)
-  const msg = `Hello ${client.name}, welcome to our legal services. Your client profile has been registered. Your lawyer will share your Case ID shortly so you can track updates via WhatsApp.`;
+  // Create a conversation record so the client shows up in chat
+  const { data: existingConvo } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("org_id", ctx.orgId)
+    .eq("phone", client.phone)
+    .maybeSingle();
+  if (!existingConvo) {
+    await supabase.from("conversations").insert({
+      org_id: ctx.orgId,
+      phone: client.phone,
+      name: client.name,
+      client_id: client.id,
+      mode: "agent",
+      session_state: "new",
+      preferred_language: client.preferred_language,
+    });
+  }
+
+  // Send WhatsApp welcome message
+  const msg = `Hello ${client.name}, welcome to LexBot. Your profile is registered. Your lawyer will share your Case ID so you can track updates on WhatsApp.`;
 
   try {
     await sendWhatsAppMessage(client.phone, msg, ctx.orgId);
-  } catch (err) {
-    console.error("Failed to send WhatsApp welcome message:", err);
+  } catch {
+    console.error("Failed to send WhatsApp welcome message:");
   }
 
   return NextResponse.json(client, { status: 201 });
